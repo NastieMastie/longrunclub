@@ -26,10 +26,10 @@ Edit `data/runs.json`:
 Sample data shows only while there are no real runs. The first logged run replaces it.
 
 ## How the numbers work (and why)
-- **Targets:** 26 weeks in three phases, starting **Oct 26, 2026** and ending at the race.
-  - **Base, 8 weeks (Oct 26 – Dec 20):** 12 → 20 mi/week, long run 4 → 8 mi. The point is turning up three times a week, not mileage. Nobody is told they are "behind" during this phase.
-  - **Build, 15 weeks (Dec 21 – Apr 4):** 20 → **40 mi/week**, long run 8 → **20 miles**. This is Hal Higdon's Novice 2 / Intermediate 1 shape, which suits runners averaging 15–25 mi/week — which is what the base phase is for.
-  - **Taper, 3 weeks (Apr 5 – race):** back down to 20 mi/week and an 8-mile long run. The target *falls*, so the app does not tell you to run peak mileage in race week.
+- **Targets:** 26 weeks in three phases, starting **Sun Oct 25, 2026** and ending at the race. The start is derived, not stored: race date minus `baseWeeks + weeks`.
+  - **Base, 8 weeks (Oct 25 – Dec 19):** 12 → 20 mi/week, long run 4 → 8 mi. The point is turning up three times a week, not mileage. Nobody is told they are "behind" during this phase.
+  - **Build, 15 weeks (Dec 20 – Apr 3):** 20 → **40 mi/week**, long run 8 → **20 miles**. This is Hal Higdon's Novice 2 / Intermediate 1 shape, which suits runners averaging 15–25 mi/week — which is what the base phase is for.
+  - **Taper, 3 weeks (Apr 4 – race):** back down to 20 mi/week and an 8-mile long run. The target *falls*, so the app does not tell you to run peak mileage in race week. It also stops ranking people against the target here, because a falling target makes everyone look "ahead" — including anyone wrongly still running peak.
   - **Why the base phase:** the 18-week plan opens at 20 mi/week. Starting there cold is the exact jump the injury guardrail below warns about. The base phase ramps about 1 mi/week, roughly 8%, well under the 30% threshold.
   - **The research behind it:** marathoners averaging under ~19 mi/week (30 km) had about 2× the injury risk of those running 19–37 mi/week ([Rasmussen 2013](https://pmc.ncbi.nlm.nih.gov/articles/PMC3625790)). Training runs of more than 20 miles protected against hitting the wall ([Buman 2009](https://www.sciencedirect.com/science/article/abs/pii/S1469029209000454)).
 - **Readiness %:** half weekly volume (4-week average vs. 40 mi) and half long run (longest in the last 6 weeks vs. 20 mi). The dashed line shows where the plan expects you to be today.

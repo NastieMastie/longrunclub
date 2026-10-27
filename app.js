@@ -233,8 +233,12 @@
         streak: streakAt(weeks, now),
         avgWeekly, long42, ready, planReady,
         // No runs yet, or still in the base phase: don't hand anyone a verdict.
+        // In the taper the target falls faster than a 4-week average can, so everyone
+        // reads "ahead" — including whoever is wrongly still running peak mileage.
+        // Comparing volume to target is the wrong frame here, so don't.
         status: !mine.length ? "new"
           : target.phase === "base" ? (ready.pct >= planReady.pct + 5 ? "ahead" : "base")
+          : target.phase === "taper" ? "taper"
           : ready.pct >= planReady.pct + 5 ? "ahead"
           : ready.pct <= planReady.pct - 8 ? "behind" : "on",
         pred, predPrev
@@ -382,7 +386,7 @@
       sub = `${mi(ahead.week - me.week)} mi behind ${esc(ahead.runner.name)}` + (pos === 1 ? " for the lead." : ".");
       if (pos === ranked.length - 1) sub += " Lanterne rouge. Lace up.";
     }
-    const r = me.ready.pct, statusText = { ahead: "ahead of plan", on: "right on plan", behind: "behind plan", base: "building your base", new: "no runs logged yet" }[me.status];
+    const r = me.ready.pct, statusText = { ahead: "ahead of plan", on: "right on plan", behind: "behind plan", base: "building your base", new: "no runs logged yet", taper: "tapering for race day" }[me.status];
     sub += ` Marathon-ready: ${r}% (${statusText}).`;
     el.innerHTML = `${head}<small>${sub}</small>`;
   }
@@ -439,7 +443,7 @@
         </div>
         <div class="ready">
           <div class="ready-top"><span>Marathon ready ${s.ready.pct}%</span>
-            <span class="status ${s.status}">${{ ahead: "Ahead of plan", on: "On plan", behind: "Behind plan", base: "Building base", new: "No runs yet" }[s.status]}</span></div>
+            <span class="status ${s.status}">${{ ahead: "Ahead of plan", on: "On plan", behind: "Behind plan", base: "Building base", new: "No runs yet", taper: "Tapering" }[s.status]}</span></div>
           <div class="bar"><div class="bar-fill" data-w="${s.ready.pct}"></div><span class="bar-plan" style="left:${s.planReady.pct}%"></span></div>
         </div>
       </li>`;
@@ -541,7 +545,7 @@
     openSheet(`
       <div style="--c:${s.runner.color}">
         <h2>${esc(s.runner.name)} <span style="color:var(--muted);font-size:22px">#${esc(s.runner.bib || "")}</span></h2>
-        <p class="lede">${s.ready.pct}% marathon ready · ${{ ahead: "ahead of", on: "right on", behind: "behind", base: "building base toward", new: "not started on" }[s.status]} plan (plan says ${s.planReady.pct}% by now)</p>
+        <p class="lede">${s.ready.pct}% marathon ready · ${{ ahead: "ahead of", on: "right on", behind: "behind", base: "building base toward", new: "not started on", taper: "tapering off" }[s.status]} plan (plan says ${s.planReady.pct}% by now)</p>
 
         <div class="big-pred">
           <div><div class="l">Predicted marathon</div><div class="t">${s.pred ? hms(s.pred) : "—"}</div>
