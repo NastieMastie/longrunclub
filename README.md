@@ -20,13 +20,17 @@ Double-click `index.html`. When the page is opened from disk, the browser blocks
 Edit `data/runs.json`:
 - `runners`: id, name, bib number, and color. If you add a runner, add their `id` to `RUNNERS` in `scripts/shared-log.gs` too.
 - `race.date`: your marathon date (`YYYY-MM-DD`).
-- `plan`: the training-plan targets used by the readiness meter. Defaults to an 18-week plan building to 40 mi/week and a 20-mile long run.
+- `plan`: the training-plan targets used by the readiness meter. Defaults to 8 base weeks plus an 18-week block (15 build + 3 taper), 26 weeks in all, building to 40 mi/week and a 20-mile long run. The plan start is derived from the race date minus `baseWeeks + weeks`, so changing either moves the start. Keep `sample.js`'s `DEFAULT_CONFIG.plan` in step — it is the fallback when `runs.json` can't be read.
 - `sharedLog.url`: the Google Sheet web-app URL for typed-in runs (see "Shared run log" below).
 
 Sample data shows only while there are no real runs. The first logged run replaces it.
 
 ## How the numbers work (and why)
-- **Targets:** an 18-week plan that starts Dec 21, 2026, builds from 20 to **40 mi/week**, and peaks with a **20-mile long run** before a 3-week taper. This matches Hal Higdon's Novice 2 and Intermediate 1 plans, which suit runners averaging 15–25 mi/week now.
+- **Targets:** 26 weeks in three phases, starting **Oct 26, 2026** and ending at the race.
+  - **Base, 8 weeks (Oct 26 – Dec 20):** 12 → 20 mi/week, long run 4 → 8 mi. The point is turning up three times a week, not mileage. Nobody is told they are "behind" during this phase.
+  - **Build, 15 weeks (Dec 21 – Apr 4):** 20 → **40 mi/week**, long run 8 → **20 miles**. This is Hal Higdon's Novice 2 / Intermediate 1 shape, which suits runners averaging 15–25 mi/week — which is what the base phase is for.
+  - **Taper, 3 weeks (Apr 5 – race):** back down to 20 mi/week and an 8-mile long run. The target *falls*, so the app does not tell you to run peak mileage in race week.
+  - **Why the base phase:** the 18-week plan opens at 20 mi/week. Starting there cold is the exact jump the injury guardrail below warns about. The base phase ramps about 1 mi/week, roughly 8%, well under the 30% threshold.
   - **The research behind it:** marathoners averaging under ~19 mi/week (30 km) had about 2× the injury risk of those running 19–37 mi/week ([Rasmussen 2013](https://pmc.ncbi.nlm.nih.gov/articles/PMC3625790)). Training runs of more than 20 miles protected against hitting the wall ([Buman 2009](https://www.sciencedirect.com/science/article/abs/pii/S1469029209000454)).
 - **Readiness %:** half weekly volume (4-week average vs. 40 mi) and half long run (longest in the last 6 weeks vs. 20 mi). The dashed line shows where the plan expects you to be today.
 - **Predicted time:** the average of two models.

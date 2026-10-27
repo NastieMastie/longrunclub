@@ -112,13 +112,32 @@
   function planTargets(date) {
     const p = config.plan, race = parseLocal(config.race.date);
     const weeksOut = (race - date) / (7 * DAY);
-    const buildWeeks = p.weeks - p.taperWeeks;
-    const into = Math.max(0, Math.min(buildWeeks, p.weeks - weeksOut));
-    const f = into / buildWeeks;
+    const baseWeeks = p.baseWeeks || 0;
+    const totalWeeks = baseWeeks + p.weeks;
+    const into = totalWeeks - weeksOut;          // weeks elapsed since the plan began
+    const buildWeeks = p.weeks - p.taperWeeks;   // build weeks inside the main block
+    const lerp = (a, b, f) => a + (b - a) * (isFinite(f) ? Math.max(0, Math.min(1, f)) : 0);
+    let weekly, long, phase;
+    if (into < baseWeeks) {
+      // Base: get out the door consistently. Nobody is "behind" here.
+      phase = "base";
+      weekly = lerp(p.baseWeeklyMiles, p.startWeeklyMiles, into / baseWeeks);
+      long = lerp(p.baseLongRun, p.startLongRun, into / baseWeeks);
+    } else if (into < baseWeeks + buildWeeks) {
+      phase = "build";
+      const f = (into - baseWeeks) / buildWeeks;
+      weekly = lerp(p.startWeeklyMiles, p.peakWeeklyMiles, f);
+      long = lerp(p.startLongRun, p.peakLongRun, f);
+    } else {
+      // Taper: the target comes DOWN. Holding it at peak told people to run in race week.
+      phase = "taper";
+      const f = (into - baseWeeks - buildWeeks) / p.taperWeeks;
+      weekly = lerp(p.peakWeeklyMiles, p.taperWeeklyMiles, f);
+      long = lerp(p.peakLongRun, p.taperLongRun, f);
+    }
     return {
-      weekly: p.startWeeklyMiles + (p.peakWeeklyMiles - p.startWeeklyMiles) * f,
-      long: p.startLongRun + (p.peakLongRun - p.startLongRun) * f,
-      weekOfPlan: Math.max(1, Math.min(p.weeks, Math.ceil(p.weeks - weeksOut + 0.001))),
+      weekly, long, phase, totalWeeks,
+      weekOfPlan: Math.max(1, Math.min(totalWeeks, Math.ceil(into + 0.001))),
       weeksOut
     };
   }
@@ -213,7 +232,11 @@
         longest: longestRun ? longestRun.miles : 0,
         streak: streakAt(weeks, now),
         avgWeekly, long42, ready, planReady,
-        status: ready.pct >= planReady.pct + 5 ? "ahead" : ready.pct <= planReady.pct - 8 ? "behind" : "on",
+        // No runs yet, or still in the base phase: don't hand anyone a verdict.
+        status: !mine.length ? "new"
+          : target.phase === "base" ? (ready.pct >= planReady.pct + 5 ? "ahead" : "base")
+          : ready.pct >= planReady.pct + 5 ? "ahead"
+          : ready.pct <= planReady.pct - 8 ? "behind" : "on",
         pred, predPrev
       };
     });
@@ -323,9 +346,9 @@
     $("#clubName").textContent = config.club;
     document.title = config.club;
     const days = Math.max(0, Math.ceil((parseLocal(config.race.date) - now) / DAY));
-    const preSeason = Math.ceil(t.weeksOut - config.plan.weeks);
+    const phaseName = { base: "base building", build: "building", taper: "taper" }[t.phase];
     $("#countdown").textContent = `${config.race.name} in ${days} days · ` +
-      (preSeason > 0 ? `plan starts in ${preSeason} wk${preSeason === 1 ? "" : "s"}` : `week ${t.weekOfPlan} of ${config.plan.weeks}`);
+      `week ${t.weekOfPlan} of ${t.totalWeeks} · ${phaseName}`;
     const me = stats.find(s => s.runner.id === meId);
     const who = $("#whoBtn");
     who.textContent = me ? me.runner.name[0] : "?";
@@ -359,7 +382,7 @@
       sub = `${mi(ahead.week - me.week)} mi behind ${esc(ahead.runner.name)}` + (pos === 1 ? " for the lead." : ".");
       if (pos === ranked.length - 1) sub += " Lanterne rouge. Lace up.";
     }
-    const r = me.ready.pct, statusText = { ahead: "ahead of plan", on: "right on plan", behind: "behind plan" }[me.status];
+    const r = me.ready.pct, statusText = { ahead: "ahead of plan", on: "right on plan", behind: "behind plan", base: "building your base", new: "no runs logged yet" }[me.status];
     sub += ` Marathon-ready: ${r}% (${statusText}).`;
     el.innerHTML = `${head}<small>${sub}</small>`;
   }
@@ -416,7 +439,7 @@
         </div>
         <div class="ready">
           <div class="ready-top"><span>Marathon ready ${s.ready.pct}%</span>
-            <span class="status ${s.status}">${{ ahead: "Ahead of plan", on: "On plan", behind: "Behind plan" }[s.status]}</span></div>
+            <span class="status ${s.status}">${{ ahead: "Ahead of plan", on: "On plan", behind: "Behind plan", base: "Building base", new: "No runs yet" }[s.status]}</span></div>
           <div class="bar"><div class="bar-fill" data-w="${s.ready.pct}"></div><span class="bar-plan" style="left:${s.planReady.pct}%"></span></div>
         </div>
       </li>`;
@@ -518,7 +541,7 @@
     openSheet(`
       <div style="--c:${s.runner.color}">
         <h2>${esc(s.runner.name)} <span style="color:var(--muted);font-size:22px">#${esc(s.runner.bib || "")}</span></h2>
-        <p class="lede">${s.ready.pct}% marathon ready · ${{ ahead: "ahead of", on: "right on", behind: "behind" }[s.status]} plan (plan says ${s.planReady.pct}% by now)</p>
+        <p class="lede">${s.ready.pct}% marathon ready · ${{ ahead: "ahead of", on: "right on", behind: "behind", base: "building base toward", new: "not started on" }[s.status]} plan (plan says ${s.planReady.pct}% by now)</p>
 
         <div class="big-pred">
           <div><div class="l">Predicted marathon</div><div class="t">${s.pred ? hms(s.pred) : "—"}</div>
@@ -604,8 +627,9 @@
           `<button type="button" style="--c:${r.color}" data-id="${r.id}" aria-pressed="${r.id === meId}">${esc(r.name)}</button>`).join("")}</div>
         <div class="row2">
           <label>Miles<input name="miles" inputmode="decimal" placeholder="6.2" autocomplete="off"></label>
-          <label>Time<input name="time" inputmode="numeric" placeholder="55:30" autocomplete="off"></label>
+          <label>Time<input name="time" inputmode="numeric" placeholder="5530" autocomplete="off"></label>
         </div>
+        <p class="note" id="timeEcho">Time: just the digits. 55 min 30 sec is <b>5530</b>.</p>
         <label>Date<input name="date" type="date" value="${today}" max="${today}"></label>
         <p class="note" id="stravaHint">${stravaHint(meId)}</p>
         <p class="err" id="logErr" role="alert"></p>
@@ -627,6 +651,18 @@
         body.querySelectorAll(".pick [data-id]").forEach(x => x.setAttribute("aria-pressed", x === b));
         body.querySelector("#stravaHint").textContent = stravaHint(who);
       });
+      // Echo back what the digits mean, so nobody has to wonder where the colon went.
+      (() => {
+        const form = body.querySelector("#logForm"), echo = body.querySelector("#timeEcho");
+        const hint = "Time: just the digits. 55 min 30 sec is <b>5530</b>.";
+        const update = () => {
+          const secs = parseDuration(form.time.value), m = parseFloat(form.miles.value);
+          if (!secs) { echo.innerHTML = hint; return; }
+          echo.innerHTML = `Reads as <b>${hms(secs)}</b>` + (m > 0 ? ` · ${pace(secs, m)}` : "");
+        };
+        form.time.oninput = update;
+        form.miles.oninput = update;
+      })();
       body.querySelector("#logForm").onsubmit = async e => {
         e.preventDefault();
         const f = e.target, err = body.querySelector("#logErr"), btn = f.querySelector("[type=submit]");

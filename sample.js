@@ -4,7 +4,11 @@
 window.DEFAULT_CONFIG = {
   club: "Long Run Club",
   race: { name: "OKC Memorial", date: "2027-04-25" },
-  plan: { weeks: 18, startWeeklyMiles: 20, peakWeeklyMiles: 40, startLongRun: 8, peakLongRun: 20, taperWeeks: 3 },
+  plan: {
+    baseWeeks: 8, baseWeeklyMiles: 12, baseLongRun: 4,
+    weeks: 18, startWeeklyMiles: 20, peakWeeklyMiles: 40, startLongRun: 8, peakLongRun: 20,
+    taperWeeks: 3, taperWeeklyMiles: 20, taperLongRun: 8
+  },
   streakRunsPerWeek: 3,
   sharedLog: { url: "" },
   runners: [
