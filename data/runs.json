@@ -5,9 +5,9 @@
   "streakRunsPerWeek": 3,
   "sharedLog": { "url": "" },
   "runners": [
-    { "id": "smass",    "name": "Smass",    "bib": "101", "color": "#FF8A1F", "strava": "" },
-    { "id": "nastie",   "name": "Nastie",   "bib": "214", "color": "#C6F432", "strava": "" },
-    { "id": "tolbskii", "name": "Tolbskii", "bib": "333", "color": "#FF5DB1", "strava": "" }
+    { "id": "smass",    "name": "Smass",    "bib": "101", "color": "#FF8A1F" },
+    { "id": "nastie",   "name": "Nastie",   "bib": "214", "color": "#C6F432" },
+    { "id": "tolbskii", "name": "Tolbskii", "bib": "333", "color": "#FF5DB1" }
   ],
   "lastSynced": null,
   "runs": []

@@ -1,13 +1,16 @@
 # Long Run Club
 
-A mobile-first marathon-training leaderboard for a small group of friends. It's a static site with no build step: plain HTML, CSS, and JS. It's hosted free on GitHub Pages, and Strava runs are pulled in hourly by a GitHub Action.
+A mobile-first marathon-training leaderboard for a small group of friends. It's a static site with no build step: plain HTML, CSS, and JS. It's hosted free on GitHub Pages. Runners type in their runs, which are saved to a shared Google Sheet.
+
+Live site: https://nastiemastie.github.io/running-app/
 
 ```
 index.html  styles.css  app.js     ← the app
 sample.js                         ← demo data generator + fallback config
-data/runs.json                    ← your group: runners, race date, plan, and synced runs
-scripts/strava_sync.py            ← pulls new runs from a Strava club
-.github/workflows/sync.yml        ← runs the sync every hour and commits new runs
+data/runs.json                    ← your group: runners, race date, plan, shared log URL
+scripts/shared-log.gs             ← Google Apps Script that turns a Sheet into the shared run log
+scripts/strava_sync.py            ← optional, for later: pulls runs from a Strava club
+.github/workflows/sync.yml        ← optional Strava sync (off by default)
 ```
 
 ## Try it locally
@@ -15,12 +18,12 @@ Double-click `index.html`. When the page is opened from disk, the browser blocks
 
 ## Customize your group
 Edit `data/runs.json`:
-- `runners`: name, bib number, color, and `strava` set to the name **exactly as it appears in your Strava club** (usually `First L.`).
+- `runners`: id, name, bib number, and color. If you add a runner, add their `id` to `RUNNERS` in `scripts/shared-log.gs` too.
 - `race.date`: your marathon date (`YYYY-MM-DD`).
 - `plan`: the training-plan targets used by the readiness meter. Defaults to an 18-week plan building to 40 mi/week and a 20-mile long run.
 - `sharedLog.url`: the Google Sheet web-app URL for typed-in runs (see "Shared run log" below).
 
-Sample data shows only while there are no real runs. The first synced or logged run replaces it.
+Sample data shows only while there are no real runs. The first logged run replaces it.
 
 ## How the numbers work (and why)
 - **Targets:** an 18-week plan that starts Dec 21, 2026, builds from 20 to **40 mi/week**, and peaks with a **20-mile long run** before a 3-week taper. This matches Hal Higdon's Novice 2 and Intermediate 1 plans, which suit runners averaging 15–25 mi/week now.
@@ -34,8 +37,10 @@ Sample data shows only while there are no real runs. The first synced or logged 
 
 ---
 
-## Shared run log (for anyone without Strava)
-Typed-in runs are saved to a Google Sheet you own, so everyone sees them instantly. It's free and nobody needs an account.
+## Shared run log (how runs get in)
+After a run, tap **Log a run** and enter miles, time, and date. Runs are saved to a Google Sheet you own, so everyone sees them instantly. It's free and nobody needs an account. Past runs can be entered the same way by picking an earlier date.
+
+One-time setup:
 1. Create a new Google Sheet, e.g. "Long Run Club log".
 2. **Extensions → Apps Script**. Delete what's there, paste in all of `scripts/shared-log.gs`, and click **Save**.
 3. **Deploy → New deployment**. Click the gear and choose **Web app**. Set **Execute as: Me** and **Who has access: Anyone**, then click **Deploy**.
@@ -65,7 +70,8 @@ Runs appear in the sheet's **Runs** tab, where you can fix typos or delete rows.
 
 ---
 
-## Connect real data (Strava covers Apple Watch + Garmin)
+## Optional, later: Strava sync (covers Apple Watch + Garmin)
+Not in use right now. If the group ever moves to Strava, follow these steps, then uncomment the `schedule` lines in `.github/workflows/sync.yml` to sync hourly. Also add each runner's Strava display name as `"strava": "First L."` in `data/runs.json`.
 
 ### 1. Get everyone's runs into Strava
 - **Apple Watch:** In the Strava iPhone app, go to **You → Settings (gear) → Applications, Services, and Devices → Health**, and turn on **Workouts** upload. Runs recorded in the Apple Workout app now sync to Strava. You can also record directly in the Strava Watch app.
@@ -105,11 +111,4 @@ Under the **Variables** tab, optionally add `TZ_OFFSET_HOURS` (e.g. `-5` for US 
 ### 5. Turn it on
 Go to **Actions → Sync Strava runs → Run workflow**. The first run marks the club's existing feed as already seen, so old runs aren't all stamped as today. After that, new runs appear within the hour, and Pages redeploys automatically.
 
-To keep the training you've done before syncing started, add those runs by hand to `"runs"` in `data/runs.json`:
-```json
-{ "runner": "dalton", "date": "2026-10-25T07:30", "miles": 12.4, "seconds": 7020 }
-```
-Or just type past runs into the app with **Log a run** once the shared run log is set up.
-
-### Without Strava
-Use the shared run log above. Anyone can tap **Log a run** after a run. If a runner *does* have Strava linked, the form reminds them to only log runs Strava missed, so nothing counts twice.
+The shared run log keeps working alongside Strava. If a runner has Strava linked, the **Log a run** form reminds them to only log runs Strava missed, so nothing counts twice.

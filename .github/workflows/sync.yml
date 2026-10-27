@@ -1,8 +1,10 @@
 name: Sync Strava runs
 
+# Strava isn't in use right now, so this only runs when started by hand.
+# To turn on hourly syncing, add the secrets (see README) and uncomment the schedule.
 on:
-  schedule:
-    - cron: "17 * * * *"   # hourly
+  # schedule:
+  #   - cron: "17 * * * *"   # hourly
   workflow_dispatch:        # "Run workflow" button in the Actions tab
 
 permissions:
