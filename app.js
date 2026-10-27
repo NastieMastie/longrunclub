@@ -63,8 +63,12 @@
   }
   // Apps Script only allows "simple" cross-origin requests, so send JSON as text/plain.
   async function sharedPost(payload) {
-    const res = await fetch(sharedUrl(), { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload) });
-    const body = await res.json();
+    // Without a timeout a dead connection leaves the Save button spinning for a minute.
+    const res = await fetch(sharedUrl(), {
+      method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload), signal: AbortSignal.timeout(20000)
+    });
+    const body = await res.json().catch(() => { throw new Error("The shared run log sent back something unexpected. Try again in a minute."); });
     if (!body.ok) throw new Error(body.error || "Save failed");
     return body;
   }
@@ -471,13 +475,23 @@
     sheet.classList.add("closing"); scrim.classList.add("closing");
     setTimeout(() => { sheet.hidden = scrim.hidden = true; lastFocus && lastFocus.focus && lastFocus.focus(); }, 220);
   }
-  $("#scrim").onclick = closeSheet;
+  // Tapping away is how you dismiss the keyboard, so the first tap only blurs.
+  // Otherwise a half-typed run disappears when you reach for the Done key iOS doesn't give you.
+  $("#scrim").onclick = () => {
+    const a = document.activeElement;
+    if (a && a.matches && a.matches("input, textarea, select")) return a.blur();
+    closeSheet();
+  };
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
   // Swipe down on the sheet to dismiss.
   (() => {
     let y0 = null;
     const sheet = $("#sheet");
-    sheet.addEventListener("touchstart", e => { y0 = sheet.scrollTop <= 0 ? e.touches[0].clientY : null; }, { passive: true });
+    sheet.addEventListener("touchstart", e => {
+      // Never swipe-dismiss off a form control; that throws away what was typed.
+      const onField = e.target.closest && e.target.closest("input, textarea, select, button");
+      y0 = (sheet.scrollTop <= 0 && !onField) ? e.touches[0].clientY : null;
+    }, { passive: true });
     sheet.addEventListener("touchmove", e => {
       if (y0 == null) return;
       const dy = e.touches[0].clientY - y0;
@@ -553,16 +567,27 @@
 
   // ---------- Log a run ----------
   function parseDuration(s) {
-    const parts = String(s).trim().split(":").map(Number);
-    if (!parts.length || parts.some(isNaN)) return null;
+    const str = String(s).trim();
+    if (!str) return null;
+    // The iOS numeric keypad has no colon key, so accept bare digits as mmss or hmmss.
+    if (/^\d+$/.test(str)) {
+      if (str.length < 3) return null;
+      const d = str.padStart(4, "0");
+      return parseDuration([d.slice(0, -4), d.slice(-4, -2), d.slice(-2)].filter(Boolean).join(":"));
+    }
+    const parts = str.split(":").map(Number);
+    if (parts.length < 2 || parts.some(isNaN)) return null;
+    if (parts.slice(1).some(p => p < 0 || p >= 60)) return null;
     return parts.reduce((a, p) => a * 60 + p, 0);
   }
   const runnerName = id => config.runners.find(x => x.id === id)?.name || id;
   function openLog() {
-    const today = isoDay(now);
+    // Read the clock now, not at page load: a Home Screen app can sit in memory for days.
+    const nowLog = new Date();
+    const today = isoDay(nowLog);
     const shared = !!sharedUrl();
     const local = shared ? [] : store.get("manualRuns", []);
-    const logged = shared ? runs.filter(r => r.source === "log").slice(-10).reverse() : [];
+    const logged = shared ? runs.filter(r => r.source === "log" && r.runner === meId).slice(-10).reverse() : [];
     const stravaHint = id => config.runners.find(r => r.id === id)?.strava
       ? "Strava runs sync on their own. Only log runs Strava missed, or they'll count twice." : "";
     openSheet(`
@@ -600,16 +625,22 @@
         const miles = parseFloat(f.miles.value), seconds = parseDuration(f.time.value);
         if (!who) return err.textContent = "Pick who ran.";
         if (!(miles > 0 && miles < 100)) return err.textContent = "Enter the distance in miles, like 6.2.";
-        if (!seconds || seconds / miles < 180) return err.textContent = "Enter the time as mm:ss or h:mm:ss, like 55:30.";
-        const hhmm = f.date.value === today ? `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}` : "12:00";
+        if (!f.date.value) return err.textContent = "Pick the day you ran.";
+        if (!seconds || seconds / miles < 180) return err.textContent = "Enter the time as mm:ss or h:mm:ss, like 55:30 or 5530.";
+        if (seconds / miles > 1800) return err.textContent = `That works out to ${pace(seconds, miles)}. Check the time.`;
+        const nowSave = new Date();
+        const hhmm = f.date.value === isoDay(nowSave) ? `${String(nowSave.getHours()).padStart(2, "0")}:${String(nowSave.getMinutes()).padStart(2, "0")}` : "12:00";
         const run = { runner: who, date: `${f.date.value}T${hhmm}`, miles: Math.round(miles * 100) / 100, seconds, source: shared ? "log" : "manual" };
         if (shared) {
           btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
           try {
             run.id = (await sharedPost({ action: "add", run })).id;
-          } catch {
+          } catch (ex) {
             btn.disabled = false; btn.textContent = "Save run";
-            return err.textContent = "Couldn't reach the shared run log. Check your connection and try again.";
+            // Show what the log actually said; only a real network failure gets the generic message.
+            const msg = ex && ex.message && !/Failed to fetch|NetworkError|aborted|timed out/i.test(ex.message)
+              ? ex.message : "Couldn't reach the shared run log. Check your connection and try again.";
+            return err.textContent = msg;
           }
           // The first real run replaces the sample data.
           if (config.sample) { runs = []; config.sample = false; }
@@ -635,14 +666,20 @@
         location.reload();
       });
       body.querySelectorAll(".del[data-id]").forEach(b => b.onclick = async () => {
+        // One stray tap used to wipe a run out of the shared sheet for everyone.
+        if (!confirm("Delete this run? It disappears for everyone.")) return;
         b.disabled = true; b.textContent = "Deleting…";
         try {
           await sharedPost({ action: "delete", id: b.dataset.id });
-          runs = runs.filter(r => r.id !== b.dataset.id);
-          compute(); render(); openLog();
-        } catch {
-          b.disabled = false; b.textContent = "Retry delete";
+        } catch (ex) {
+          // Already gone is the outcome we wanted, not a failure to retry.
+          if (!/not found/i.test(ex && ex.message || "")) {
+            b.disabled = false; b.textContent = "Retry delete";
+            return;
+          }
         }
+        runs = runs.filter(r => r.id !== b.dataset.id);
+        compute(); render(); openLog();
       });
       const copy = body.querySelector("#copyJson");
       if (copy) copy.onclick = async () => {
