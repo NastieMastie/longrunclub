@@ -75,7 +75,10 @@
 
   // ---------- Date helpers ----------
   function parseLocal(s) {
-    const [d, t = "12:00"] = String(s).split("T");
+    // Sheets coerces "2026-10-27T14:29" to a datetime and hands it back with a SPACE.
+    // Splitting on "T" alone made every stored run an Invalid Date, so it counted
+    // toward nothing: no weekly miles, no longest run, no prediction.
+    const [d, t = "12:00"] = String(s).trim().split(/[T ]+/);
     const [y, m, dd] = d.split("-").map(Number);
     const [h, mi] = t.split(":").map(Number);
     return new Date(y, m - 1, dd, h || 0, mi || 0);
