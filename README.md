@@ -2,7 +2,7 @@
 
 A mobile-first marathon-training leaderboard for a small group of friends. It's a static site with no build step: plain HTML, CSS, and JS. It's hosted free on GitHub Pages. Runners type in their runs, which are saved to a shared Google Sheet.
 
-Live site: https://nastiemastie.github.io/running-app/
+Live site: https://nastiemastie.github.io/longrunclub/
 
 ```
 index.html  styles.css  app.js     ← the app
@@ -57,18 +57,18 @@ Runs appear in the sheet's **Runs** tab, where you can fix typos or delete rows.
 ---
 
 ## Host it on GitHub Pages
-1. Create a free account at github.com, then click **New repository**. Name it `running-app` and make it **Public**. Free Pages needs a public repo, so see the privacy note below.
+1. Create a free account at github.com, then click **New repository**. Name it `longrunclub` and make it **Public**. Free Pages needs a public repo, so see the privacy note below.
 2. In this folder:
    ```
    git init
    git add .
    git commit -m "Long Run Club v1"
    git branch -M main
-   git remote add origin https://github.com/YOUR-USERNAME/running-app.git
+   git remote add origin https://github.com/YOUR-USERNAME/longrunclub.git
    git push -u origin main
    ```
 3. In the repo, open **Settings → Pages**. Under *Source*, choose **Deploy from a branch**, then pick `main` and `/ (root)`, then **Save**.
-4. After about a minute, the site is live at `https://YOUR-USERNAME.github.io/running-app/`. Text that link to your friends.
+4. After about a minute, the site is live at `https://YOUR-USERNAME.github.io/longrunclub/`. Text that link to your friends.
 5. On iPhone, open it in Safari, tap **Share → Add to Home Screen**. It then opens full-screen like an app, with the bib icon.
 
 **Privacy:** a public repo means anyone who finds the URL or repo can see names and mileage. Use first names only. A private repo with Pages needs GitHub Pro.
