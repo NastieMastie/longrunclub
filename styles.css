@@ -282,6 +282,12 @@ main, .top { max-width: 560px; margin: 0 auto; padding-left: 16px; padding-right
 .runs li { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--mist); font-size: 14px; font-variant-numeric: tabular-nums; }
 .runs li span:last-child { color: var(--muted); }
 .runs .del { border: 0; background: none; color: var(--track-dark); font-weight: 700; min-height: 44px; padding: 0 0 0 12px; }
+.runs .editrun {
+  flex: 1; text-align: left; border: 0; background: none; font: inherit; color: inherit;
+  min-height: 44px; padding: 0 8px 0 0; border-radius: 8px;
+}
+.runs .editrun:active { background: var(--mist); }
+.runs .editrun.editing { background: var(--mist); box-shadow: inset 3px 0 0 var(--ink); padding-left: 8px; }
 
 /* forms */
 .form { display: grid; gap: 14px; margin-top: 16px; }

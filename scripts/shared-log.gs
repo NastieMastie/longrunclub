@@ -69,6 +69,23 @@ function doPost(e) {
       sh.appendRow([id, r.runner, r.date, Math.round(miles * 100) / 100, Math.round(seconds), new Date().toISOString()]);
       return json_({ ok: true, id: id });
     }
+    if (body.action === "update") {
+      // Correcting a typo in place. Same checks as "add" — an edit must not be a
+      // way to write a value the add path would have refused.
+      const r = body.run || {};
+      const miles = Number(r.miles), seconds = Number(r.seconds);
+      if (RUNNERS.indexOf(r.runner) === -1) return json_({ ok: false, error: "Unknown runner" });
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(r.date)) return json_({ ok: false, error: "Bad date" });
+      if (!(miles > 0 && miles < 100) || !(seconds > 0 && seconds < 86400)) return json_({ ok: false, error: "Bad distance or time" });
+      const ids = sh.getRange(1, 1, sh.getLastRow(), 1).getDisplayValues();
+      for (let i = 1; i < ids.length; i++) {
+        if (ids[i][0] === String(r.id)) {
+          sh.getRange(i + 1, 2, 1, 4).setValues([[r.runner, r.date, Math.round(miles * 100) / 100, Math.round(seconds)]]);
+          return json_({ ok: true, id: String(r.id) });
+        }
+      }
+      return json_({ ok: false, error: "Run not found" });
+    }
     if (body.action === "delete") {
       const ids = sh.getRange(1, 1, sh.getLastRow(), 1).getDisplayValues();
       for (let i = ids.length - 1; i >= 1; i--) {

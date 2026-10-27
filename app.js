@@ -659,9 +659,11 @@
         <p class="note" id="stravaHint">${stravaHint(meId)}</p>
         <p class="err" id="logErr" role="alert"></p>
         <button class="btn" type="submit">Save run</button>
+        <button class="btn ghost" type="button" id="cancelEdit" style="width:100%;margin-top:10px" hidden>Cancel edit</button>
       </form>
-      ${logged.length ? `<h3>Recently logged</h3><ul class="runs">${logged.map(r => `
-        <li><span><b>${esc(runnerName(r.runner))}</b> · ${mi(r.miles)} mi · ${relDay(r.t)}</span>
+      ${logged.length ? `<h3>Recently logged</h3><p class="note">Tap one to fix the date, distance or time.</p><ul class="runs">${logged.map(r => `
+        <li><button class="editrun" data-id="${esc(r.id)}" data-runner="${esc(r.runner)}" data-miles="${r.miles}" data-seconds="${r.seconds}" data-date="${esc(r.date)}">
+          <b>${esc(runnerName(r.runner))}</b> · ${mi(r.miles)} mi · ${hms(r.seconds)} · ${relDay(r.t)}</button>
         <button class="del" data-id="${esc(r.id)}">Delete</button></li>`).join("")}</ul>` : ""}
       ${local.length ? `<h3>On this phone</h3><ul class="runs">${local.slice().reverse().map((r, i) => `
         <li><span><b>${esc(runnerName(r.runner))}</b> · ${mi(r.miles)} mi · ${r.date.slice(0, 10)}</span>
@@ -671,6 +673,8 @@
       let who = meId;
       // One id per attempt at saving this run, kept across retries so the log can spot a repeat.
       let pendingId = null;
+      // Set while correcting an existing run, so Save updates that row instead of adding one.
+      let editingId = null, editingDate = "";
       body.querySelectorAll(".pick [data-id]").forEach(b => b.onclick = () => {
         who = b.dataset.id;
         pendingId = null;   // different runner, different run
@@ -692,6 +696,36 @@
         form.time.oninput = update;
         form.miles.oninput = update;
         form.date.onchange = () => { pendingId = null; };
+        // Tapping a logged run loads it into the form; Save then corrects it in place
+        // instead of adding a second row.
+        body.querySelectorAll(".editrun[data-id]").forEach(b => b.onclick = () => {
+          editingId = b.dataset.id;
+          editingDate = String(b.dataset.date).trim();
+          who = b.dataset.runner;
+          pendingId = null;
+          form.miles.value = b.dataset.miles;
+          form.time.value = hms(Number(b.dataset.seconds));
+          form.date.value = String(b.dataset.date).trim().split(/[T ]+/)[0];
+          body.querySelectorAll(".pick [data-id]").forEach(x => x.setAttribute("aria-pressed", x.dataset.id === who));
+          body.querySelectorAll(".editrun").forEach(x => x.classList.toggle("editing", x === b));
+          body.querySelector("#logErr").textContent = "";
+          form.querySelector("[type=submit]").textContent = "Update run";
+          body.querySelector("#cancelEdit").hidden = false;
+          update();
+          form.miles.focus();
+        });
+        body.querySelector("#cancelEdit").onclick = () => {
+          editingId = null; editingDate = "";
+          form.reset();
+          form.date.value = today;
+          who = meId;
+          body.querySelectorAll(".pick [data-id]").forEach(x => x.setAttribute("aria-pressed", x.dataset.id === who));
+          body.querySelectorAll(".editrun").forEach(x => x.classList.remove("editing"));
+          form.querySelector("[type=submit]").textContent = "Save run";
+          body.querySelector("#cancelEdit").hidden = true;
+          body.querySelector("#logErr").textContent = "";
+          update();
+        };
       })();
       body.querySelector("#logForm").onsubmit = async e => {
         e.preventDefault();
@@ -706,19 +740,24 @@
         if (seconds / miles < 180) return err.textContent = `That works out to ${pace(seconds, miles)}. Check the distance and time.`;
         if (seconds / miles > 1800) return err.textContent = `That works out to ${pace(seconds, miles)}. Check the distance and time.`;
         const nowSave = new Date();
-        const hhmm = f.date.value === isoDay(nowSave) ? `${String(nowSave.getHours()).padStart(2, "0")}:${String(nowSave.getMinutes()).padStart(2, "0")}` : "12:00";
+        // Correcting a run must not silently move its clock time. Keep the original
+        // unless the day itself changed; only a brand new run gets stamped with now.
+        const [editDay, editTime] = editingDate.split(/[T ]+/);
+        const hhmm = (editingId && editDay === f.date.value && /^\d{2}:\d{2}/.test(editTime || ""))
+          ? editTime.slice(0, 5)
+          : f.date.value === isoDay(nowSave) ? `${String(nowSave.getHours()).padStart(2, "0")}:${String(nowSave.getMinutes()).padStart(2, "0")}` : "12:00";
         const run = { runner: who, date: `${f.date.value}T${hhmm}`, miles: Math.round(miles * 100) / 100, seconds, source: shared ? "log" : "manual" };
         if (shared) {
           // Stamp the id here, not on the server: if the reply gets lost and you tap Save
           // again, the same id comes back and the log refuses to write the run twice.
-          if (!pendingId) pendingId = newRunId();
-          run.id = pendingId;
-          btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
+          // When correcting an existing run, its own id is the one that matters.
+          run.id = editingId || (pendingId = pendingId || newRunId());
+          btn.disabled = true; btn.textContent = editingId ? "Updating…" : "Saving…"; err.textContent = "";
           try {
-            run.id = (await sharedPost({ action: "add", run })).id || run.id;
+            run.id = (await sharedPost({ action: editingId ? "update" : "add", run })).id || run.id;
             pendingId = null;
           } catch (ex) {
-            btn.disabled = false; btn.textContent = "Save run";
+            btn.disabled = false; btn.textContent = editingId ? "Update run" : "Save run";
             // Show what the log actually said; only a real network failure gets the generic message.
             // "Load failed" is Safari's wording, which is what these phones run.
             const msg = ex && ex.message && !/Failed to fetch|Load failed|NetworkError|aborted|timed out|cancell?ed/i.test(ex.message)
@@ -731,9 +770,14 @@
           store.set("manualRuns", store.get("manualRuns", []).concat(run));
         }
         closeSheet();
+        const edited = !!editingId;
+        if (edited) runs = runs.filter(r => r.id !== run.id);   // swap the corrected row in
+        editingId = null; editingDate = "";
         runs.push({ ...run, t: parseLocal(run.date) });
         runs.sort((a, b) => a.t - b.t);
         compute(); render();
+        // A correction isn't an achievement; don't throw confetti at a typo fix.
+        if (edited) return;
         setTimeout(() => {
           if (!showPopups()) {
             const n = config.runners.find(r => r.id === who).name;
