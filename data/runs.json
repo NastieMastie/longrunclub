@@ -1,9 +1,9 @@
 {
   "club": "Long Run Club",
-  "race": { "name": "Race day", "date": "2027-04-23" },
-  "plan": { "weeks": 18, "startWeeklyMiles": 18, "peakWeeklyMiles": 40, "startLongRun": 8, "peakLongRun": 20, "taperWeeks": 3 },
+  "race": { "name": "OKC Memorial", "date": "2027-04-25" },
+  "plan": { "weeks": 18, "startWeeklyMiles": 20, "peakWeeklyMiles": 40, "startLongRun": 8, "peakLongRun": 20, "taperWeeks": 3 },
   "streakRunsPerWeek": 3,
-  "useSampleData": true,
+  "sharedLog": { "url": "" },
   "runners": [
     { "id": "smass",    "name": "Smass",    "bib": "101", "color": "#FF8A1F", "strava": "" },
     { "id": "nastie",   "name": "Nastie",   "bib": "214", "color": "#C6F432", "strava": "" },

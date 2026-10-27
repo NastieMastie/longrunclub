@@ -18,12 +18,31 @@ Edit `data/runs.json`:
 - `runners`: name, bib number, color, and `strava` set to the name **exactly as it appears in your Strava club** (usually `First L.`).
 - `race.date`: your marathon date (`YYYY-MM-DD`).
 - `plan`: the training-plan targets used by the readiness meter. Defaults to an 18-week plan building to 40 mi/week and a 20-mile long run.
-- `useSampleData`: leave this `true` until real runs arrive. The sync flips it to `false` automatically.
+- `sharedLog.url`: the Google Sheet web-app URL for typed-in runs (see "Shared run log" below).
 
-## How the numbers work
-- **Readiness %** is half weekly volume (your 4-week average vs. the peak-week target) and half long run (your longest run in the last 6 weeks vs. 20 mi). The dashed line shows where the plan expects you to be today.
-- **Predicted time** uses Riegel: `T2 = T1 × (26.2 / D1)^1.06`. It averages the best three predictions from 3+ mile runs in the last 6 weeks, then adds up to 6% if your long run is still short, because Riegel is optimistic for under-trained endurance. Training runs are slower than race effort, so treat the number as conservative.
-- **Streak** counts consecutive weeks with at least 3 runs. A missed day doesn't break it.
+Sample data shows only while there are no real runs. The first synced or logged run replaces it.
+
+## How the numbers work (and why)
+- **Targets:** an 18-week plan that starts Dec 21, 2026, builds from 20 to **40 mi/week**, and peaks with a **20-mile long run** before a 3-week taper. This matches Hal Higdon's Novice 2 and Intermediate 1 plans, which suit runners averaging 15–25 mi/week now.
+  - **The research behind it:** marathoners averaging under ~19 mi/week (30 km) had about 2× the injury risk of those running 19–37 mi/week ([Rasmussen 2013](https://pmc.ncbi.nlm.nih.gov/articles/PMC3625790)). Training runs of more than 20 miles protected against hitting the wall ([Buman 2009](https://www.sciencedirect.com/science/article/abs/pii/S1469029209000454)).
+- **Readiness %:** half weekly volume (4-week average vs. 40 mi) and half long run (longest in the last 6 weeks vs. 20 mi). The dashed line shows where the plan expects you to be today.
+- **Predicted time:** the average of two models.
+  - **Riegel**, `T × (26.2 / D)^1.07`, using your best three 3+ mile runs from the last 6 weeks. It uses 1.07 rather than the classic 1.06, because [Vickers & Vertosick 2016](https://bmcsportsscimedrehabil.biomedcentral.com/articles/10.1186/s13102-016-0052-y) found 1.06 predicts marathon times that are too fast.
+  - **Tanda**, which predicts from your last 8 weeks of training alone: weekly distance plus average training pace ([Tanda 2011](https://running-universe.com/predicting-marathon-finish-times-the-tanda-equation/)).
+- **"Easy, tiger" warning:** pops up when someone's weekly miles jump more than 30% over their previous two weeks. New runners who ramped up that fast got hurt more often ([Nielsen 2014](https://www.jospt.org/doi/pdf/10.2519/jospt.2014.5164)).
+- **Streak:** consecutive weeks with at least 3 runs. A missed day doesn't break it.
+
+---
+
+## Shared run log (for anyone without Strava)
+Typed-in runs are saved to a Google Sheet you own, so everyone sees them instantly. It's free and nobody needs an account.
+1. Create a new Google Sheet, e.g. "Long Run Club log".
+2. **Extensions → Apps Script**. Delete what's there, paste in all of `scripts/shared-log.gs`, and click **Save**.
+3. **Deploy → New deployment**. Click the gear and choose **Web app**. Set **Execute as: Me** and **Who has access: Anyone**, then click **Deploy**.
+4. Google will warn that the app isn't verified, because it's your own script. Click **Advanced → Go to (project) → Allow**.
+5. Copy the **Web app URL** (it ends in `/exec`) into `"sharedLog": { "url": "..." }` in `data/runs.json`.
+
+Runs appear in the sheet's **Runs** tab, where you can fix typos or delete rows. Anyone with the site link can add runs, so keep the link within the group.
 
 ---
 
@@ -90,8 +109,7 @@ To keep the training you've done before syncing started, add those runs by hand 
 ```json
 { "runner": "dalton", "date": "2026-10-25T07:30", "miles": 12.4, "seconds": 7020 }
 ```
-The **Log a run** button saves runs on that phone only. Its **Copy as JSON** button gives you exactly this format to paste in.
+Or just type past runs into the app with **Log a run** once the shared run log is set up.
 
 ### Without Strava
-- **Apple Health only:** the *Health Auto Export* iOS app can POST workouts to a URL on a schedule. That needs a small backend (e.g. a Cloudflare Worker) that writes to this repo.
-- **Garmin only:** Garmin's Health API requires applying to their developer program, which is overkill for 4 friends.
+Use the shared run log above. Anyone can tap **Log a run** after a run. If a runner *does* have Strava linked, the form reminds them to only log runs Strava missed, so nothing counts twice.

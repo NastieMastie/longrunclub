@@ -114,8 +114,6 @@ def main():
         if unknown:
             print("Club members with no matching \"strava\" name in data/runs.json:", ", ".join(sorted(unknown)))
         return
-    if added:
-        data["useSampleData"] = False
     data["lastSynced"] = (dt.datetime.now(dt.timezone.utc) + offset).strftime("%Y-%m-%dT%H:%M")
     with open(DATA, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)

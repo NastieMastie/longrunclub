@@ -27,14 +27,16 @@
     config = Object.assign(structuredClone(window.DEFAULT_CONFIG), cfg);
     config.plan = Object.assign({}, window.DEFAULT_CONFIG.plan, cfg.plan || {});
 
-    const sample = config.useSampleData || !(config.runs || []).length;
-    config.sample = sample;
-    runs = sample ? window.generateSampleRuns(config.runners, now) : config.runs.slice();
+    // Real runs = Strava-synced (runs.json) + the shared run log. Sample data only fills an empty board.
+    const real = (config.runs || []).concat(await loadShared());
+    config.sample = !real.length;
+    runs = config.sample ? window.generateSampleRuns(config.runners, now) : real;
     if (!config.race?.date) {
       // No race date set yet: pretend it's ~10 weeks out so the plan maths has something to chew on.
       config.race = Object.assign({}, config.race, { date: isoDay(new Date(+now + 70 * DAY)) });
     }
-    runs = runs.concat(store.get("manualRuns", []))
+    // Without a shared log, typed-in runs live on this phone only.
+    runs = runs.concat(sharedUrl() ? [] : store.get("manualRuns", []))
       .map(r => ({ ...r, t: parseLocal(r.date) }))
       .filter(r => r.miles > 0 && config.runners.some(x => x.id === r.runner))
       .sort((a, b) => a.t - b.t);
@@ -42,6 +44,29 @@
     render();
     if (!meId || !config.runners.some(r => r.id === meId)) openWho(true);
     else setTimeout(showPopups, 900);
+  }
+
+  // ---------- Shared run log (Google Sheet + Apps Script, see scripts/shared-log.gs) ----------
+  let sharedError = false;
+  const sharedUrl = () => (config.sharedLog && config.sharedLog.url) || "";
+  async function loadShared() {
+    if (!sharedUrl()) return [];
+    try {
+      const res = await fetch(sharedUrl());
+      const body = await res.json();
+      if (!body.ok) throw new Error(body.error);
+      return body.runs.map(r => ({ ...r, miles: +r.miles, seconds: +r.seconds, source: "log" }));
+    } catch {
+      sharedError = true;
+      return [];
+    }
+  }
+  // Apps Script only allows "simple" cross-origin requests, so send JSON as text/plain.
+  async function sharedPost(payload) {
+    const res = await fetch(sharedUrl(), { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload) });
+    const body = await res.json();
+    if (!body.ok) throw new Error(body.error || "Save failed");
+    return body;
   }
 
   // ---------- Date helpers ----------
@@ -100,18 +125,24 @@
     return { pct: Math.round(50 * w + 50 * l), w, l };
   }
 
-  // Riegel: T2 = T1 × (D2/D1)^1.06, using runs ≥ 3 mi from the 6 weeks before `asOf`.
-  // We average the best three predictions to smooth out one freak run, then add up to +6%
-  // when the long run is still short, since Riegel is optimistic for under-trained endurance.
+  // Average of two estimates:
+  // 1. Riegel, T2 = T1 × (26.2 / D1)^1.07, on the best three 3+ mile runs from the last 6 weeks.
+  //    k = 1.07, not the classic 1.06: Vickers & Vertosick (2016) found 1.06 too fast for marathons.
+  // 2. Tanda (2011), which predicts from training alone over the last 8 weeks:
+  //    pace (s/km) = 17.1 + 140·e^(−0.0053·weekly km) + 0.55·average training pace (s/km).
+  //    Needs 3+ weeks of history; until then Riegel stands alone.
   function predict(mine, asOf) {
-    const from = +asOf - 42 * DAY;
-    const recent = mine.filter(r => r.t <= asOf && r.t >= from && r.miles >= 3 && r.seconds > 0);
-    if (!recent.length) return null;
-    const preds = recent.map(r => r.seconds * Math.pow(MARATHON / r.miles, 1.06)).sort((a, b) => a - b);
-    const best = preds.slice(0, 3);
-    const base = best.reduce((a, b) => a + b, 0) / best.length;
-    const longest = Math.max(...recent.map(r => r.miles));
-    return base * (1 + 0.06 * (1 - Math.min(1, longest / config.plan.peakLongRun)));
+    const block = mine.filter(r => r.t <= asOf && r.t > +asOf - 56 * DAY && r.seconds > 0);
+    const efforts = block.filter(r => r.t > +asOf - 42 * DAY && r.miles >= 3);
+    if (!efforts.length) return null;
+    const best = efforts.map(r => r.seconds * Math.pow(MARATHON / r.miles, 1.07)).sort((a, b) => a - b).slice(0, 3);
+    const riegel = best.reduce((a, b) => a + b, 0) / best.length;
+    const weeks = Math.min(8, (asOf - mine[0].t) / (7 * DAY));
+    if (weeks < 3) return riegel;
+    const km = block.reduce((a, r) => a + r.miles, 0) * 1.609344;
+    const avgPace = block.reduce((a, r) => a + r.seconds, 0) / km;
+    const tanda = (17.1 + 140 * Math.exp(-0.0053 * (km / weeks)) + 0.55 * avgPace) * 42.195;
+    return (riegel + tanda) / 2;
   }
 
   function streakAt(weeks, upTo) {
@@ -218,6 +249,11 @@
       "{n} managed {m} miles last week. Even the dog asked if they were okay.",
       "{m} miles for {n} last week. The plan called. It's not mad, just disappointed."
     ],
+    ramp: [
+      "{n} jumped {p}% in mileage last week. Jumps over 30% are linked to more running injuries. Your shins would like a word.",
+      "{n} went up {p}% last week. Love the energy, but that's how shins start filing complaints. Hold steady this week.",
+      "{p}% more miles for {n} last week. Bold. Maybe let the legs catch up before the next jump."
+    ],
     champ: [
       "{n} won last week with {m} miles. Everyone else: you have been warned.",
       "Last week's mileage crown goes to {n} ({m} mi). Please bow on the cool-down."
@@ -250,6 +286,12 @@
         } else if (s.lastWeek < typical * 0.5) {
           out.push({ id: `low-${id}-${lastWeek}`, kind: "roast", runner: s.runner, t: addWeeks(lastStart, 1), emo: "🐌",
             title: "Light week, huh?", body: fill(pick(LINES.low, id + lastWeek), { n, m: mi(s.lastWeek) }), weight: 1 });
+        }
+        // Injury guardrail: >30% jump over the previous two weeks' average (Nielsen et al. 2014).
+        const base = ([2, 3].reduce((a, k) => a + (s.weeks[weekKey(addWeeks(now, -k))]?.miles || 0), 0)) / 2;
+        if (base >= 8 && s.lastWeek > base * 1.3) {
+          out.push({ id: `ramp-${id}-${lastWeek}`, kind: "warn", runner: s.runner, t: addWeeks(lastStart, 1), emo: "🦴",
+            title: "Easy, tiger", body: fill(pick(LINES.ramp, id + lastWeek), { n, p: Math.round((s.lastWeek / base - 1) * 100) }), weight: 2 });
         }
       }
     }
@@ -287,7 +329,8 @@
     renderCards(false);
     renderFeed();
     const synced = config.lastSynced ? `Synced ${relDay(new Date(config.lastSynced))}` : "";
-    $("#foot").innerHTML = (config.sample ? "Showing sample data · " : "") + esc(synced) +
+    $("#foot").innerHTML = (sharedError ? "<b>Couldn't load the shared run log.</b> Close and reopen to retry. ·" : "") +
+      (config.sample ? "Showing sample data until the first real run · " : "") + esc(synced) +
       ` <button id="resetBtn">Reset pop-ups</button>`;
     $("#resetBtn").onclick = () => { store.set("seen", []); showPopups(); };
   }
@@ -393,7 +436,8 @@
     const decimals = (el.dataset.count.split(".")[1] || "").length;
     const start = performance.now(), dur = 900;
     const step = t => {
-      const p = Math.min(1, (t - start) / dur), e = 1 - Math.pow(1 - p, 3);
+      // rAF timestamps can predate `start`, so clamp to avoid a negative first frame.
+      const p = Math.max(0, Math.min(1, (t - start) / dur)), e = 1 - Math.pow(1 - p, 3);
       el.textContent = (target * e).toFixed(decimals);
       if (p < 1) requestAnimationFrame(step);
     };
@@ -462,7 +506,7 @@
 
         <div class="big-pred">
           <div><div class="l">Predicted marathon</div><div class="t">${s.pred ? hms(s.pred) : "—"}</div>
-            <div class="l">${s.pred ? pace(s.pred, MARATHON) + " · Riegel formula, last 6 weeks" : "Log a 3+ mile run to get a prediction"}</div></div>
+            <div class="l">${s.pred ? pace(s.pred, MARATHON) + " · Riegel + Tanda average, last 8 weeks" : "Log a 3+ mile run to get a prediction"}</div></div>
           ${s.pred && s.predPrev ? `<span class="trend ${trend > 0 ? "up" : ""}">${trend > 0 ? "▼ " + hms(trend) + " faster" : trend < 0 ? "▲ " + hms(-trend) + " slower" : "no change"} vs 2 wks ago</span>` : ""}
         </div>
 
@@ -513,12 +557,17 @@
     if (!parts.length || parts.some(isNaN)) return null;
     return parts.reduce((a, p) => a * 60 + p, 0);
   }
+  const runnerName = id => config.runners.find(x => x.id === id)?.name || id;
   function openLog() {
     const today = isoDay(now);
-    const local = store.get("manualRuns", []);
+    const shared = !!sharedUrl();
+    const local = shared ? [] : store.get("manualRuns", []);
+    const logged = shared ? runs.filter(r => r.source === "log").slice(-10).reverse() : [];
+    const stravaHint = id => config.runners.find(r => r.id === id)?.strava
+      ? "Strava runs sync on their own. Only log runs Strava missed, or they'll count twice." : "";
     openSheet(`
       <h2>Log a run</h2>
-      <p class="lede">Saved on this phone so you can see it instantly. Once Strava sync is on, runs show up for everyone automatically.</p>
+      <p class="lede">${shared ? "Shows up for everyone as soon as you save." : "Saved on this phone only until the shared run log is set up."}</p>
       <form class="form" id="logForm" novalidate>
         <div class="pick" role="group" aria-label="Runner">${config.runners.map(r =>
           `<button type="button" style="--c:${r.color}" data-id="${r.id}" aria-pressed="${r.id === meId}">${esc(r.name)}</button>`).join("")}</div>
@@ -527,11 +576,15 @@
           <label>Time<input name="time" inputmode="numeric" placeholder="55:30" autocomplete="off"></label>
         </div>
         <label>Date<input name="date" type="date" value="${today}" max="${today}"></label>
+        <p class="note" id="stravaHint">${stravaHint(meId)}</p>
         <p class="err" id="logErr" role="alert"></p>
         <button class="btn" type="submit">Save run</button>
       </form>
+      ${logged.length ? `<h3>Recently logged</h3><ul class="runs">${logged.map(r => `
+        <li><span><b>${esc(runnerName(r.runner))}</b> · ${mi(r.miles)} mi · ${relDay(r.t)}</span>
+        <button class="del" data-id="${esc(r.id)}">Delete</button></li>`).join("")}</ul>` : ""}
       ${local.length ? `<h3>On this phone</h3><ul class="runs">${local.slice().reverse().map((r, i) => `
-        <li><span><b>${esc(config.runners.find(x => x.id === r.runner)?.name || r.runner)}</b> · ${mi(r.miles)} mi · ${r.date.slice(0, 10)}</span>
+        <li><span><b>${esc(runnerName(r.runner))}</b> · ${mi(r.miles)} mi · ${r.date.slice(0, 10)}</span>
         <button class="del" data-i="${local.length - 1 - i}">Delete</button></li>`).join("")}</ul>
         <button class="btn ghost" style="width:100%;margin-top:14px" id="copyJson">Copy as JSON for runs.json</button>` : ""}
     `, body => {
@@ -539,17 +592,30 @@
       body.querySelectorAll(".pick [data-id]").forEach(b => b.onclick = () => {
         who = b.dataset.id;
         body.querySelectorAll(".pick [data-id]").forEach(x => x.setAttribute("aria-pressed", x === b));
+        body.querySelector("#stravaHint").textContent = stravaHint(who);
       });
-      body.querySelector("#logForm").onsubmit = e => {
+      body.querySelector("#logForm").onsubmit = async e => {
         e.preventDefault();
-        const f = e.target, err = body.querySelector("#logErr");
+        const f = e.target, err = body.querySelector("#logErr"), btn = f.querySelector("[type=submit]");
         const miles = parseFloat(f.miles.value), seconds = parseDuration(f.time.value);
         if (!who) return err.textContent = "Pick who ran.";
         if (!(miles > 0 && miles < 100)) return err.textContent = "Enter the distance in miles, like 6.2.";
         if (!seconds || seconds / miles < 180) return err.textContent = "Enter the time as mm:ss or h:mm:ss, like 55:30.";
         const hhmm = f.date.value === today ? `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}` : "12:00";
-        const run = { runner: who, date: `${f.date.value}T${hhmm}`, miles: Math.round(miles * 100) / 100, seconds, source: "manual" };
-        store.set("manualRuns", store.get("manualRuns", []).concat(run));
+        const run = { runner: who, date: `${f.date.value}T${hhmm}`, miles: Math.round(miles * 100) / 100, seconds, source: shared ? "log" : "manual" };
+        if (shared) {
+          btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
+          try {
+            run.id = (await sharedPost({ action: "add", run })).id;
+          } catch {
+            btn.disabled = false; btn.textContent = "Save run";
+            return err.textContent = "Couldn't reach the shared run log. Check your connection and try again.";
+          }
+          // The first real run replaces the sample data.
+          if (config.sample) { runs = []; config.sample = false; }
+        } else {
+          store.set("manualRuns", store.get("manualRuns", []).concat(run));
+        }
         closeSheet();
         runs.push({ ...run, t: parseLocal(run.date) });
         runs.sort((a, b) => a.t - b.t);
@@ -562,11 +628,21 @@
           }
         }, 350);
       };
-      body.querySelectorAll(".del").forEach(b => b.onclick = () => {
+      body.querySelectorAll(".del[data-i]").forEach(b => b.onclick = () => {
         const list = store.get("manualRuns", []);
         list.splice(+b.dataset.i, 1);
         store.set("manualRuns", list);
         location.reload();
+      });
+      body.querySelectorAll(".del[data-id]").forEach(b => b.onclick = async () => {
+        b.disabled = true; b.textContent = "Deleting…";
+        try {
+          await sharedPost({ action: "delete", id: b.dataset.id });
+          runs = runs.filter(r => r.id !== b.dataset.id);
+          compute(); render(); openLog();
+        } catch {
+          b.disabled = false; b.textContent = "Retry delete";
+        }
       });
       const copy = body.querySelector("#copyJson");
       if (copy) copy.onclick = async () => {
@@ -598,13 +674,14 @@
     const wrap = $("#popWrap"), pop = $("#pop");
     const e = popQueue[0];
     if (!e) { wrap.hidden = true; return; }
-    pop.className = "pop" + (e.kind === "roast" ? " roast" : "");
+    const label = { roast: ["Friendly roast", "Oof. Noted."], warn: ["Coach's note", "Got it, coach"] }[e.kind] || ["Hype alert", "Let's go!"];
+    pop.className = "pop" + (e.kind === "celebrate" ? "" : " roast");
     pop.innerHTML = `
       <span class="p-emo" aria-hidden="true">${e.emo}</span>
-      <div class="p-kicker">${e.kind === "roast" ? "Friendly roast" : "Hype alert"}</div>
+      <div class="p-kicker">${label[0]}</div>
       <h3>${esc(e.title)}</h3>
       <p>${esc(e.body)}</p>
-      <button class="btn" id="popOk">${e.kind === "roast" ? "Oof. Noted." : "Let's go!"}</button>
+      <button class="btn" id="popOk">${label[1]}</button>
       ${popQueue.length > 1 ? `<div class="count">${popQueue.length - 1} more</div>` : ""}`;
     wrap.hidden = false;
     // restart the CSS animation
