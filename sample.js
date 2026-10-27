@@ -3,15 +3,14 @@
 
 window.DEFAULT_CONFIG = {
   club: "Long Run Club",
-  race: { name: "Race Day", date: null },
+  race: { name: "Race day", date: "2027-04-23" },
   plan: { weeks: 18, startWeeklyMiles: 18, peakWeeklyMiles: 40, startLongRun: 8, peakLongRun: 20, taperWeeks: 3 },
   streakRunsPerWeek: 3,
   useSampleData: true,
   runners: [
-    { id: "dalton", name: "Dalton", bib: "101", color: "#FF8A1F" },
-    { id: "maya",   name: "Maya",   bib: "214", color: "#C6F432" },
-    { id: "jordan", name: "Jordan", bib: "333", color: "#FF5DB1" },
-    { id: "priya",  name: "Priya",  bib: "426", color: "#3EE0F0" }
+    { id: "smass",    name: "Smass",    bib: "101", color: "#FF8A1F" },
+    { id: "nastie",   name: "Nastie",   bib: "214", color: "#C6F432" },
+    { id: "tolbskii", name: "Tolbskii", bib: "333", color: "#FF5DB1" }
   ],
   runs: []
 };

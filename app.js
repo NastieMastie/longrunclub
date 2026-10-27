@@ -30,8 +30,8 @@
     const sample = config.useSampleData || !(config.runs || []).length;
     config.sample = sample;
     runs = sample ? window.generateSampleRuns(config.runners, now) : config.runs.slice();
-    if (sample || !config.race?.date) {
-      // Demo race ~10 weeks out so the plan maths has something to chew on.
+    if (!config.race?.date) {
+      // No race date set yet: pretend it's ~10 weeks out so the plan maths has something to chew on.
       config.race = Object.assign({}, config.race, { date: isoDay(new Date(+now + 70 * DAY)) });
     }
     runs = runs.concat(store.get("manualRuns", []))
@@ -275,7 +275,9 @@
     $("#clubName").textContent = config.club;
     document.title = config.club;
     const days = Math.max(0, Math.ceil((parseLocal(config.race.date) - now) / DAY));
-    $("#countdown").textContent = `${config.race.name} in ${days} days · week ${t.weekOfPlan} of ${config.plan.weeks}`;
+    const preSeason = Math.ceil(t.weeksOut - config.plan.weeks);
+    $("#countdown").textContent = `${config.race.name} in ${days} days · ` +
+      (preSeason > 0 ? `plan starts in ${preSeason} wk${preSeason === 1 ? "" : "s"}` : `week ${t.weekOfPlan} of ${config.plan.weeks}`);
     const me = stats.find(s => s.runner.id === meId);
     const who = $("#whoBtn");
     who.textContent = me ? me.runner.name[0] : "?";
