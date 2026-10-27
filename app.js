@@ -581,6 +581,10 @@
     return parts.reduce((a, p) => a * 60 + p, 0);
   }
   const runnerName = id => config.runners.find(x => x.id === id)?.name || id;
+  function newRunId() {
+    if (crypto.randomUUID) return crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+    return (Date.now().toString(36) + Math.random().toString(36).slice(2)).slice(0, 12);
+  }
   function openLog() {
     // Read the clock now, not at page load: a Home Screen app can sit in memory for days.
     const nowLog = new Date();
@@ -614,6 +618,8 @@
         <button class="btn ghost" style="width:100%;margin-top:14px" id="copyJson">Copy as JSON for runs.json</button>` : ""}
     `, body => {
       let who = meId;
+      // One id per attempt at saving this run, kept across retries so the log can spot a repeat.
+      let pendingId = null;
       body.querySelectorAll(".pick [data-id]").forEach(b => b.onclick = () => {
         who = b.dataset.id;
         body.querySelectorAll(".pick [data-id]").forEach(x => x.setAttribute("aria-pressed", x === b));
@@ -632,9 +638,14 @@
         const hhmm = f.date.value === isoDay(nowSave) ? `${String(nowSave.getHours()).padStart(2, "0")}:${String(nowSave.getMinutes()).padStart(2, "0")}` : "12:00";
         const run = { runner: who, date: `${f.date.value}T${hhmm}`, miles: Math.round(miles * 100) / 100, seconds, source: shared ? "log" : "manual" };
         if (shared) {
+          // Stamp the id here, not on the server: if the reply gets lost and you tap Save
+          // again, the same id comes back and the log refuses to write the run twice.
+          if (!pendingId) pendingId = newRunId();
+          run.id = pendingId;
           btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
           try {
-            run.id = (await sharedPost({ action: "add", run })).id;
+            run.id = (await sharedPost({ action: "add", run })).id || run.id;
+            pendingId = null;
           } catch (ex) {
             btn.disabled = false; btn.textContent = "Save run";
             // Show what the log actually said; only a real network failure gets the generic message.

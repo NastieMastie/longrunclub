@@ -57,7 +57,15 @@ function doPost(e) {
       if (RUNNERS.indexOf(r.runner) === -1) return json_({ ok: false, error: "Unknown runner" });
       if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(r.date)) return json_({ ok: false, error: "Bad date" });
       if (!(miles > 0 && miles < 100) || !(seconds > 0 && seconds < 86400)) return json_({ ok: false, error: "Bad distance or time" });
-      const id = Utilities.getUuid().slice(0, 8);
+      // The phone stamps the id before it posts. If its reply got lost and it retried,
+      // the id is already here, so return it instead of adding the run a second time.
+      const id = /^[A-Za-z0-9_-]{6,36}$/.test(String(r.id || "")) ? String(r.id) : Utilities.getUuid().slice(0, 8);
+      if (sh.getLastRow() > 1) {
+        const ids = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getDisplayValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (ids[i][0] === id) return json_({ ok: true, id: id, duplicate: true });
+        }
+      }
       sh.appendRow([id, r.runner, r.date, Math.round(miles * 100) / 100, Math.round(seconds), new Date().toISOString()]);
       return json_({ ok: true, id: id });
     }
