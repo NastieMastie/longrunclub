@@ -282,6 +282,12 @@ main, .top { max-width: 560px; margin: 0 auto; padding-left: 16px; padding-right
 .runs li { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--mist); font-size: 14px; font-variant-numeric: tabular-nums; }
 .runs li span:last-child { color: var(--muted); }
 .runs .del { border: 0; background: none; color: var(--track-dark); font-weight: 700; min-height: 44px; padding: 0 0 0 12px; }
+.form .check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; }
+.form .check input {
+  width: 22px; height: 22px; min-height: 0; padding: 0; flex: none;
+  border-radius: 6px; accent-color: var(--ink);
+}
+.form .check small { color: var(--muted); }
 .runs .editrun {
   flex: 1; text-align: left; border: 0; background: none; font: inherit; color: inherit;
   min-height: 44px; padding: 0 8px 0 0; border-radius: 8px;

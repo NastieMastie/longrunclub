@@ -52,7 +52,10 @@
   async function loadShared() {
     if (!sharedUrl()) return [];
     try {
-      const res = await fetch(sharedUrl());
+      // load() waits on this before it draws anything, so without a cap the whole
+      // board stays blank for as long as Apps Script takes — forever, if it never
+      // answers. 12s, then render what we have and flag the error.
+      const res = await fetch(sharedUrl(), { signal: AbortSignal.timeout(12000) });
       const body = await res.json();
       if (!body.ok) throw new Error(body.error);
       return body.runs.map(r => ({ ...r, miles: +r.miles, seconds: +r.seconds, source: "log" }));
@@ -168,17 +171,25 @@
   //    pace (s/km) = 17.1 + 140·e^(−0.0053·weekly km) + 0.55·average training pace (s/km).
   //    Needs 3+ weeks of history; until then Riegel stands alone.
   function predict(mine, asOf) {
+    if (!mine.length) return null;
     const block = mine.filter(r => r.t <= asOf && r.t > +asOf - 56 * DAY && r.seconds > 0);
-    const efforts = block.filter(r => r.t > +asOf - 42 * DAY && r.miles >= 3);
-    if (!efforts.length) return null;
-    const best = efforts.map(r => r.seconds * Math.pow(MARATHON / r.miles, 1.07)).sort((a, b) => a - b).slice(0, 3);
-    const riegel = best.reduce((a, b) => a + b, 0) / best.length;
+    // Riegel converts a RACE EFFORT to a marathon time. Fed ordinary easy miles it
+    // reads ~20 min slow, so it only ever sees runs the runner marked as an effort.
+    const efforts = block.filter(r => r.t > +asOf - 42 * DAY && r.miles >= 3 && r.effort);
+    let riegel = null, tanda = null;
+    if (efforts.length) {
+      const best = efforts.map(r => r.seconds * Math.pow(MARATHON / r.miles, 1.07)).sort((a, b) => a - b).slice(0, 3);
+      riegel = best.reduce((a, b) => a + b, 0) / best.length;
+    }
+    // Tanda is built to predict from training alone, so easy miles are exactly its input.
     const weeks = Math.min(8, (asOf - mine[0].t) / (7 * DAY));
-    if (weeks < 3) return riegel;
     const km = block.reduce((a, r) => a + r.miles, 0) * 1.609344;
-    const avgPace = block.reduce((a, r) => a + r.seconds, 0) / km;
-    const tanda = (17.1 + 140 * Math.exp(-0.0053 * (km / weeks)) + 0.55 * avgPace) * 42.195;
-    return (riegel + tanda) / 2;
+    if (weeks >= 3 && km > 0) {
+      const avgPace = block.reduce((a, r) => a + r.seconds, 0) / km;
+      tanda = (17.1 + 140 * Math.exp(-0.0053 * (km / weeks)) + 0.55 * avgPace) * 42.195;
+    }
+    if (riegel && tanda) return (riegel + tanda) / 2;
+    return riegel || tanda || null;
   }
 
   function streakAt(weeks, upTo) {
@@ -406,7 +417,7 @@
     if (goal) {
       sub += me.pred
         ? ` On pace for <b>${hm(me.pred)}</b> — ${me.pred <= goal ? `${hms(goal - me.pred)} inside` : `${hms(me.pred - goal)} off`} the ${hm(goal)} goal.`
-        : ` Goal ${hm(goal)} — ${pace(goal, 26.2)}. Log a run and it'll start predicting.`;
+        : ` Goal ${hm(goal)} — ${pace(goal, 26.2)}. Tick "hard effort" on a run of 3+ miles and it'll start predicting.`;
     }
     el.innerHTML = `${head}<small>${sub}</small>`;
   }
@@ -656,14 +667,16 @@
         </div>
         <p class="note" id="timeEcho">Time: just the digits. 55 min 30 sec is <b>5530</b>.</p>
         <label>Date<input name="date" type="date" value="${today}" max="${today}"></label>
+        <label class="check"><input name="effort" type="checkbox">
+          <span>Hard effort or race <small>— only these are used to predict your finish time</small></span></label>
         <p class="note" id="stravaHint">${stravaHint(meId)}</p>
         <p class="err" id="logErr" role="alert"></p>
         <button class="btn" type="submit">Save run</button>
         <button class="btn ghost" type="button" id="cancelEdit" style="width:100%;margin-top:10px" hidden>Cancel edit</button>
       </form>
       ${logged.length ? `<h3>Recently logged</h3><p class="note">Tap one to fix the date, distance or time.</p><ul class="runs">${logged.map(r => `
-        <li><button class="editrun" data-id="${esc(r.id)}" data-runner="${esc(r.runner)}" data-miles="${r.miles}" data-seconds="${r.seconds}" data-date="${esc(r.date)}">
-          <b>${esc(runnerName(r.runner))}</b> · ${mi(r.miles)} mi · ${hms(r.seconds)} · ${relDay(r.t)}</button>
+        <li><button class="editrun" data-id="${esc(r.id)}" data-runner="${esc(r.runner)}" data-miles="${r.miles}" data-seconds="${r.seconds}" data-date="${esc(r.date)}" data-effort="${r.effort ? 1 : 0}">
+          <b>${esc(runnerName(r.runner))}</b> · ${mi(r.miles)} mi · ${hms(r.seconds)} · ${relDay(r.t)}${r.effort ? " · ⚡" : ""}</button>
         <button class="del" data-id="${esc(r.id)}">Delete</button></li>`).join("")}</ul>` : ""}
       ${local.length ? `<h3>On this phone</h3><ul class="runs">${local.slice().reverse().map((r, i) => `
         <li><span><b>${esc(runnerName(r.runner))}</b> · ${mi(r.miles)} mi · ${r.date.slice(0, 10)}</span>
@@ -706,6 +719,7 @@
           form.miles.value = b.dataset.miles;
           form.time.value = hms(Number(b.dataset.seconds));
           form.date.value = String(b.dataset.date).trim().split(/[T ]+/)[0];
+          form.effort.checked = b.dataset.effort === "1";
           body.querySelectorAll(".pick [data-id]").forEach(x => x.setAttribute("aria-pressed", x.dataset.id === who));
           body.querySelectorAll(".editrun").forEach(x => x.classList.toggle("editing", x === b));
           body.querySelector("#logErr").textContent = "";
@@ -746,7 +760,7 @@
         const hhmm = (editingId && editDay === f.date.value && /^\d{2}:\d{2}/.test(editTime || ""))
           ? editTime.slice(0, 5)
           : f.date.value === isoDay(nowSave) ? `${String(nowSave.getHours()).padStart(2, "0")}:${String(nowSave.getMinutes()).padStart(2, "0")}` : "12:00";
-        const run = { runner: who, date: `${f.date.value}T${hhmm}`, miles: Math.round(miles * 100) / 100, seconds, source: shared ? "log" : "manual" };
+        const run = { runner: who, date: `${f.date.value}T${hhmm}`, miles: Math.round(miles * 100) / 100, seconds, effort: !!f.effort.checked, source: shared ? "log" : "manual" };
         if (shared) {
           // Stamp the id here, not on the server: if the reply gets lost and you tap Save
           // again, the same id comes back and the log refuses to write the run twice.

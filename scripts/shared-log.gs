@@ -15,7 +15,8 @@
  * so the URL stays the same.
  */
 const RUNNERS = ["smass", "nastie", "tolbskii"];
-const HEADERS = ["id", "runner", "date", "miles", "seconds", "addedAt"];
+const HEADERS = ["id", "runner", "date", "miles", "seconds", "addedAt", "effort"];
+const EFFORT_COL = 7;
 
 function sheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -28,6 +29,9 @@ function sheet_() {
     sh.getRange("D:D").setNumberFormat("0.00");
     sh.getRange("E:E").setNumberFormat("0");
   }
+  // A sheet created before the effort column exists needs the header, or the tab
+  // ends up with an unlabelled column G.
+  if (sh.getRange(1, EFFORT_COL).getDisplayValue() !== "effort") sh.getRange(1, EFFORT_COL).setValue("effort");
   return sh;
 }
 
@@ -39,7 +43,7 @@ function doGet() {
   const rows = sheet_().getDataRange().getDisplayValues().slice(1);
   const runs = rows
     .filter(r => r[0] && RUNNERS.indexOf(r[1]) !== -1)
-    .map(r => ({ id: r[0], runner: r[1], date: r[2], miles: Number(r[3]), seconds: Number(r[4]) }));
+    .map(r => ({ id: r[0], runner: r[1], date: r[2], miles: Number(r[3]), seconds: Number(r[4]), effort: String(r[6] || "").toLowerCase() === "yes" }));
   return json_({ ok: true, runs: runs });
 }
 
@@ -66,7 +70,7 @@ function doPost(e) {
           if (ids[i][0] === id) return json_({ ok: true, id: id, duplicate: true });
         }
       }
-      sh.appendRow([id, r.runner, r.date, Math.round(miles * 100) / 100, Math.round(seconds), new Date().toISOString()]);
+      sh.appendRow([id, r.runner, r.date, Math.round(miles * 100) / 100, Math.round(seconds), new Date().toISOString(), r.effort ? "yes" : ""]);
       return json_({ ok: true, id: id });
     }
     if (body.action === "update") {
@@ -81,6 +85,7 @@ function doPost(e) {
       for (let i = 1; i < ids.length; i++) {
         if (ids[i][0] === String(r.id)) {
           sh.getRange(i + 1, 2, 1, 4).setValues([[r.runner, r.date, Math.round(miles * 100) / 100, Math.round(seconds)]]);
+          sh.getRange(i + 1, EFFORT_COL).setValue(r.effort ? "yes" : "");
           return json_({ ok: true, id: String(r.id) });
         }
       }
