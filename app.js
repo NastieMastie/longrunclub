@@ -217,7 +217,9 @@
         pred, predPrev
       };
     });
-    events = buildEvents(lastWeek);
+    // The feed names real people. On sample data every badge and roast would be a
+    // fabricated accusation, so show the empty state until someone logs a real run.
+    events = config.sample ? [] : buildEvents(lastWeek);
   }
 
   // ---------- Hype & roasts ----------
@@ -705,6 +707,9 @@
   // ---------- Pop-ups ----------
   let popQueue = [];
   function showPopups() {
+    // Never celebrate or roast someone over invented runs. Sample data is for
+    // showing the shape of the app, not for telling Tolbskii he ghosted a week.
+    if (config.sample) return false;
     const seen = new Set(store.get("seen", []));
     const fresh = events.filter(e => !seen.has(e.id)).sort((a, b) => (b.runner.id === meId) - (a.runner.id === meId) || b.weight - a.weight).slice(0, 4);
     // Mark every current event seen so a backlog doesn't spam on the next visit.

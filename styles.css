@@ -27,6 +27,10 @@ body {
   overflow-x: hidden;
   padding-bottom: calc(96px + env(safe-area-inset-bottom));
 }
+
+/* Any author `display` beats the browser's own [hidden] rule, so hiding an element
+   in JS silently fails and it keeps swallowing taps. Make [hidden] mean hidden. */
+[hidden] { display: none !important; }
 button { font: inherit; color: inherit; cursor: pointer; }
 :focus-visible { outline: 3px solid var(--lime); outline-offset: 2px; }
 
