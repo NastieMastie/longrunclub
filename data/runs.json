@@ -3,7 +3,7 @@
   "race": { "name": "OKC Memorial", "date": "2027-04-25" },
   "plan": { "weeks": 18, "startWeeklyMiles": 20, "peakWeeklyMiles": 40, "startLongRun": 8, "peakLongRun": 20, "taperWeeks": 3 },
   "streakRunsPerWeek": 3,
-  "sharedLog": { "url": "" },
+  "sharedLog": { "url": "https://script.google.com/macros/s/AKfycbyNDKAPP7nz0WIIuEVq-lTS6ujUo3yl-pYmnrmOPWu8A_hZSPkK6PsCTIbqVicP5c3qdQ/exec" },
   "runners": [
     { "id": "smass",    "name": "Smass",    "bib": "101", "color": "#FF8A1F" },
     { "id": "nastie",   "name": "Nastie",   "bib": "214", "color": "#C6F432" },
