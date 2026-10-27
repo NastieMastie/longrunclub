@@ -3,11 +3,11 @@
 
 window.DEFAULT_CONFIG = {
   club: "Long Run Club",
-  race: { name: "OKC Memorial", date: "2027-04-25" },
+  race: { name: "OKC Memorial", date: "2027-04-25", goal: "3:30:00" },
   plan: {
-    baseWeeks: 8, baseWeeklyMiles: 12, baseLongRun: 4,
-    weeks: 18, startWeeklyMiles: 20, peakWeeklyMiles: 40, startLongRun: 8, peakLongRun: 20,
-    taperWeeks: 3, taperWeeklyMiles: 20, taperLongRun: 8
+    baseWeeks: 8, baseWeeklyMiles: 15, baseLongRun: 5,
+    weeks: 18, startWeeklyMiles: 25, peakWeeklyMiles: 48, startLongRun: 10, peakLongRun: 20,
+    taperWeeks: 3, taperWeeklyMiles: 24, taperLongRun: 8
   },
   streakRunsPerWeek: 3,
   // Must match data/runs.json. This is the fallback when runs.json can't be fetched;

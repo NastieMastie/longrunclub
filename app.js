@@ -106,6 +106,12 @@
   const pace = (sec, miles) => hms(sec / miles) + "/mi";
   // Some iOS keyboards offer a comma on the decimal pad; parseFloat("6,2") is 6.
   const milesOf = v => parseFloat(String(v).trim().replace(",", "."));
+  // The goal finish time, as seconds. Absent or unreadable means the app just won't mention it.
+  const goalSeconds = () => {
+    const parts = String((config.race && config.race.goal) || "").split(":").map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return 0;
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  };
   const ordinal = n => n + (["th", "st", "nd", "rd"][(n % 100 - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const hash = s => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7);
@@ -392,6 +398,13 @@
     }
     const r = me.ready.pct, statusText = { ahead: "ahead of plan", on: "right on plan", behind: "behind plan", base: "building your base", new: "no runs logged yet", taper: "tapering for race day" }[me.status];
     sub += ` Marathon-ready: ${r}% (${statusText}).`;
+    // The goal is the whole point, so say where they stand against it, not just a %.
+    const goal = goalSeconds();
+    if (goal) {
+      sub += me.pred
+        ? ` On pace for <b>${hm(me.pred)}</b> — ${me.pred <= goal ? `${hms(goal - me.pred)} inside` : `${hms(me.pred - goal)} off`} the ${hm(goal)} goal.`
+        : ` Goal ${hm(goal)} — ${pace(goal, 26.2)}. Log a run and it'll start predicting.`;
+    }
     el.innerHTML = `${head}<small>${sub}</small>`;
   }
 
@@ -568,7 +581,7 @@
         <h3>Last 8 weeks</h3>
         <div class="weeks">${wkKeys.map((k, i) => {
           const m = s.weeks[k]?.miles || 0;
-          return `<div class="${i === 7 ? "now" : ""}"><span>${m ? Math.round(m) : ""}</span><i style="height:${(m / maxWk) * 100}%"></i><span>${i === 7 ? "now" : parseLocal(k).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}</span></div>`;
+          return `<div class="${i === 7 ? "now" : ""}"><span>${m ? Math.round(m) : ""}</span><i style="height:${Math.max(4, (m / maxWk) * 110)}px"></i><span>${i === 7 ? "now" : parseLocal(k).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}</span></div>`;
         }).join("")}</div>
 
         <h3>Badges · ${Object.keys(s.earned).length}/${BADGES.length}</h3>
