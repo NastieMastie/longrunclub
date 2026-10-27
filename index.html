@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Long Run Club</title>
+  <meta name="description" content="Our marathon training leaderboard.">
+  <meta name="theme-color" content="#2F2BE0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Long Run">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Onest:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="brand-name" id="clubName">Long Run Club</span>
+      <span class="countdown" id="countdown"></span>
+    </div>
+    <button class="who-btn" id="whoBtn" aria-label="Switch runner"></button>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="standing">
+      <p class="standing" id="standing"></p>
+      <div class="track" id="track" role="img" aria-label="Marathon readiness by runner"></div>
+      <p class="track-key"><span class="key-plan"></span> where the plan says you should be today</p>
+    </section>
+
+    <section class="board" aria-label="Leaderboard">
+      <div class="tabs" role="tablist" id="tabs">
+        <button role="tab" data-sort="week" aria-selected="true">This week</button>
+        <button role="tab" data-sort="total">Total</button>
+        <button role="tab" data-sort="longest">Longest</button>
+        <button role="tab" data-sort="streak">Streak</button>
+        <button role="tab" data-sort="predicted">Fastest</button>
+      </div>
+      <ol class="cards" id="cards"></ol>
+    </section>
+
+    <section class="feed" aria-labelledby="feedTitle">
+      <h2 id="feedTitle">Hype &amp; roasts</h2>
+      <ul id="feed"></ul>
+    </section>
+
+    <footer class="foot" id="foot"></footer>
+  </main>
+
+  <button class="fab" id="logBtn"><span aria-hidden="true">+</span> Log a run</button>
+
+  <!-- Bottom sheet (runner detail, log form, who-are-you) -->
+  <div class="scrim" id="scrim" hidden></div>
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true" hidden>
+    <div class="grabber" aria-hidden="true"></div>
+    <div id="sheetBody"></div>
+  </div>
+
+  <!-- Celebration / roast pop-up -->
+  <div class="pop-wrap" id="popWrap" hidden>
+    <div class="pop" id="pop" role="alertdialog" aria-live="assertive"></div>
+  </div>
+  <canvas id="confetti" aria-hidden="true"></canvas>
+
+  <script src="sample.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

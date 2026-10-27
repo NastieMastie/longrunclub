@@ -1,0 +1,58 @@
+name: Sync Strava runs
+
+on:
+  schedule:
+    - cron: "17 * * * *"   # hourly
+  workflow_dispatch:        # "Run workflow" button in the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: strava-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Pull runs from Strava club
+        id: strava
+        env:
+          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
+          STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
+          STRAVA_CLUB_ID: ${{ secrets.STRAVA_CLUB_ID }}
+          TZ_OFFSET_HOURS: ${{ vars.TZ_OFFSET_HOURS }}
+          BACKFILL: ${{ vars.BACKFILL }}
+        run: python scripts/strava_sync.py
+
+      - name: Save rotated refresh token
+        if: steps.strava.outputs.new_refresh_token != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          NEW_TOKEN: ${{ steps.strava.outputs.new_refresh_token }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::Strava rotated the refresh token. Add a GH_PAT secret so it can be saved automatically, or update STRAVA_REFRESH_TOKEN by hand."
+          else
+            gh secret set STRAVA_REFRESH_TOKEN --body "$NEW_TOKEN" --repo "$GITHUB_REPOSITORY"
+          fi
+
+      - name: Commit new runs
+        run: |
+          git config user.name "strava-sync[bot]"
+          git config user.email "strava-sync@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "No changes."
+          else
+            git commit -m "Sync runs from Strava"
+            git push
+          fi
