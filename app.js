@@ -100,8 +100,12 @@
     const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
     return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
   }
-  const hm = sec => { const h = Math.floor(sec / 3600), m = Math.round(sec % 3600 / 60); return `${h}:${String(m).padStart(2, "0")}`; };
+  // Round to whole minutes FIRST. Rounding the remainder alone never carries into
+  // the hour, so a 4:59:45 prediction used to print as "4:60".
+  const hm = sec => { const t = Math.round(sec / 60); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
   const pace = (sec, miles) => hms(sec / miles) + "/mi";
+  // Some iOS keyboards offer a comma on the decimal pad; parseFloat("6,2") is 6.
+  const milesOf = v => parseFloat(String(v).trim().replace(",", "."));
   const ordinal = n => n + (["th", "st", "nd", "rd"][(n % 100 - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const hash = s => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7);
@@ -605,7 +609,8 @@
       return parseDuration([d.slice(0, -4), d.slice(-4, -2), d.slice(-2)].filter(Boolean).join(":"));
     }
     const parts = str.split(":").map(Number);
-    if (parts.length < 2 || parts.some(isNaN)) return null;
+    if (parts.length < 2 || parts.length > 3 || parts.some(isNaN)) return null;
+    if (parts[0] < 0 || !isFinite(parts[0])) return null;
     if (parts.slice(1).some(p => p < 0 || p >= 60)) return null;
     return parts.reduce((a, p) => a * 60 + p, 0);
   }
@@ -652,6 +657,7 @@
       let pendingId = null;
       body.querySelectorAll(".pick [data-id]").forEach(b => b.onclick = () => {
         who = b.dataset.id;
+        pendingId = null;   // different runner, different run
         body.querySelectorAll(".pick [data-id]").forEach(x => x.setAttribute("aria-pressed", x === b));
         body.querySelector("#stravaHint").textContent = stravaHint(who);
       });
@@ -660,22 +666,29 @@
         const form = body.querySelector("#logForm"), echo = body.querySelector("#timeEcho");
         const hint = "Time: just the digits. 55 min 30 sec is <b>5530</b>.";
         const update = () => {
-          const secs = parseDuration(form.time.value), m = parseFloat(form.miles.value);
-          if (!secs) { echo.innerHTML = hint; return; }
+          // Editing after a failed save makes it a different run, so it needs a new id —
+          // otherwise the log recognises the old one and quietly keeps the old numbers.
+          pendingId = null;
+          const secs = parseDuration(form.time.value), m = milesOf(form.miles.value);
+          if (!(secs > 0 && isFinite(secs))) { echo.innerHTML = hint; return; }
           echo.innerHTML = `Reads as <b>${hms(secs)}</b>` + (m > 0 ? ` · ${pace(secs, m)}` : "");
         };
         form.time.oninput = update;
         form.miles.oninput = update;
+        form.date.onchange = () => { pendingId = null; };
       })();
       body.querySelector("#logForm").onsubmit = async e => {
         e.preventDefault();
         const f = e.target, err = body.querySelector("#logErr"), btn = f.querySelector("[type=submit]");
-        const miles = parseFloat(f.miles.value), seconds = parseDuration(f.time.value);
+        const miles = Math.round(milesOf(f.miles.value) * 100) / 100, seconds = parseDuration(f.time.value);
         if (!who) return err.textContent = "Pick who ran.";
-        if (!(miles > 0 && miles < 100)) return err.textContent = "Enter the distance in miles, like 6.2.";
+        if (!(miles >= 0.01 && miles < 100)) return err.textContent = "Enter the distance in miles, like 6.2.";
         if (!f.date.value) return err.textContent = "Pick the day you ran.";
-        if (!seconds || seconds / miles < 180) return err.textContent = "Enter the time as mm:ss or h:mm:ss, like 55:30 or 5530.";
-        if (seconds / miles > 1800) return err.textContent = `That works out to ${pace(seconds, miles)}. Check the time.`;
+        // Keep these three apart: "I can't read it" and "that pace looks wrong" are
+        // different problems, and blaming the format for a pace error reads as a lie.
+        if (!(seconds > 0 && seconds < 86400)) return err.textContent = "Enter the time as digits, like 5530 for 55 min 30 sec.";
+        if (seconds / miles < 180) return err.textContent = `That works out to ${pace(seconds, miles)}. Check the distance and time.`;
+        if (seconds / miles > 1800) return err.textContent = `That works out to ${pace(seconds, miles)}. Check the distance and time.`;
         const nowSave = new Date();
         const hhmm = f.date.value === isoDay(nowSave) ? `${String(nowSave.getHours()).padStart(2, "0")}:${String(nowSave.getMinutes()).padStart(2, "0")}` : "12:00";
         const run = { runner: who, date: `${f.date.value}T${hhmm}`, miles: Math.round(miles * 100) / 100, seconds, source: shared ? "log" : "manual" };
@@ -691,7 +704,8 @@
           } catch (ex) {
             btn.disabled = false; btn.textContent = "Save run";
             // Show what the log actually said; only a real network failure gets the generic message.
-            const msg = ex && ex.message && !/Failed to fetch|NetworkError|aborted|timed out/i.test(ex.message)
+            // "Load failed" is Safari's wording, which is what these phones run.
+            const msg = ex && ex.message && !/Failed to fetch|Load failed|NetworkError|aborted|timed out|cancell?ed/i.test(ex.message)
               ? ex.message : "Couldn't reach the shared run log. Check your connection and try again.";
             return err.textContent = msg;
           }

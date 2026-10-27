@@ -10,7 +10,10 @@ window.DEFAULT_CONFIG = {
     taperWeeks: 3, taperWeeklyMiles: 20, taperLongRun: 8
   },
   streakRunsPerWeek: 3,
-  sharedLog: { url: "" },
+  // Must match data/runs.json. This is the fallback when runs.json can't be fetched;
+  // leaving it empty made the app quietly save runs to the phone alone, and the next
+  // successful load then dropped them for good.
+  sharedLog: { url: "https://script.google.com/macros/s/AKfycbyNDKAPP7nz0WIIuEVq-lTS6ujUo3yl-pYmnrmOPWu8A_hZSPkK6PsCTIbqVicP5c3qdQ/exec" },
   runners: [
     { id: "smass",    name: "Smass",    bib: "101", color: "#FF8A1F" },
     { id: "nastie",   name: "Nastie",   bib: "214", color: "#C6F432" },
