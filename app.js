@@ -157,7 +157,22 @@
       weeksOut
     };
   }
-  // Readiness = half weekly volume (4-week average vs. peak-week target), half long run (6-week best vs. 20 mi).
+  // Invert Tanda for average training pace: at a given weekly volume, what pace does
+  // the goal finish time require? Returns seconds per mile. Falls out of the same
+  // equation used to predict, so it needs no invented constants.
+  //   marathon s/km = 17.1 + 140·e^(−0.0053·weekly km) + 0.55·training s/km
+  function goalTrainingPace(weeklyMiles) {
+    const goal = goalSeconds();
+    if (!goal || !(weeklyMiles > 0)) return 0;
+    const km = weeklyMiles * 1.609344;
+    const sPerKm = (goal / 42.195 - 17.1 - 140 * Math.exp(-0.0053 * km)) / 0.55;
+    return sPerKm > 0 ? sPerKm * 1.609344 : 0;
+  }
+
+  // Plan progress = half weekly volume (4-week average vs. peak-week target), half long
+  // run (6-week best vs. 20 mi). Deliberately NOT a pace measure: a pace term moves this
+  // by ~3 points across a 22-minute spread in predicted finish, so it would add a
+  // constant to invent and nothing a reader could see. The goal gap carries pace.
   function readiness(avgWeekly, longest) {
     const p = config.plan;
     const w = Math.min(1, avgWeekly / p.peakWeeklyMiles), l = Math.min(1, longest / p.peakLongRun);
@@ -240,7 +255,9 @@
         const state = { run, total, week: weeks[k].miles, streak: streakAt(weeks, run.t) };
         for (const b of BADGES) if (!earned[b.id] && b.test(state)) earned[b.id] = run.t;
       }
-      const last28 = mine.filter(r => r.t > +now - 28 * DAY).reduce((a, r) => a + r.miles, 0);
+      const recent = mine.filter(r => r.t > +now - 28 * DAY);
+      const last28 = recent.reduce((a, r) => a + r.miles, 0);
+      const last28Secs = recent.reduce((a, r) => a + (r.seconds || 0), 0);
       const long42 = Math.max(0, ...mine.filter(r => r.t > +now - 42 * DAY).map(r => r.miles));
       const avgWeekly = last28 / 4;
       const ready = readiness(avgWeekly, long42);
@@ -256,6 +273,7 @@
         longest: longestRun ? longestRun.miles : 0,
         streak: streakAt(weeks, now),
         avgWeekly, long42, ready, planReady,
+        last28Miles: last28, last28Secs,
         // No runs yet, or still in the base phase: don't hand anyone a verdict.
         // In the taper the target falls faster than a 4-week average can, so everyone
         // reads "ahead" — including whoever is wrongly still running peak mileage.
@@ -411,7 +429,7 @@
       if (pos === ranked.length - 1) sub += " Lanterne rouge. Lace up.";
     }
     const r = me.ready.pct, statusText = { ahead: "ahead of plan", on: "right on plan", behind: "behind plan", base: "building your base", new: "no runs logged yet", taper: "tapering for race day" }[me.status];
-    sub += ` Marathon-ready: ${r}% (${statusText}).`;
+    sub += ` Plan progress: ${r}% (${statusText}).`;
     // The goal is the whole point, so say where they stand against it, not just a %.
     const goal = goalSeconds();
     if (goal) {
@@ -432,7 +450,7 @@
           <span class="plan-tick" style="left:${plan}%"></span>
           <button class="runner-dot${s.runner.id === meId ? " me" : ""}${s.ready.pct > 70 ? " flip" : ""}"
             style="--c:${s.runner.color};left:0" data-left="${s.ready.pct}" data-id="${s.runner.id}"
-            aria-label="${esc(s.runner.name)}: ${s.ready.pct}% marathon ready">
+            aria-label="${esc(s.runner.name)}: ${s.ready.pct}% through the plan">
             ${esc(s.runner.name[0])}<span class="pct">${s.ready.pct}%</span>
           </button>
         </div>
@@ -473,7 +491,7 @@
           ${sortKey !== "predicted" && s.pred ? `<span class="chip">⏱ ${hm(s.pred)}${trend > 60 ? " ↓" : ""}</span>` : ""}
         </div>
         <div class="ready">
-          <div class="ready-top"><span>Marathon ready ${s.ready.pct}%</span>
+          <div class="ready-top"><span>Plan progress ${s.ready.pct}%</span>
             <span class="status ${s.status}">${{ ahead: "Ahead of plan", on: "On plan", behind: "Behind plan", base: "Building base", new: "No runs yet", taper: "Tapering" }[s.status]}</span></div>
           <div class="bar"><div class="bar-fill" data-w="${s.ready.pct}"></div><span class="bar-plan" style="left:${s.planReady.pct}%"></span></div>
         </div>
@@ -576,15 +594,32 @@
     openSheet(`
       <div style="--c:${s.runner.color}">
         <h2>${esc(s.runner.name)} <span style="color:var(--muted);font-size:22px">#${esc(s.runner.bib || "")}</span></h2>
-        <p class="lede">${s.ready.pct}% marathon ready · ${{ ahead: "ahead of", on: "right on", behind: "behind", base: "building base toward", new: "not started on", taper: "tapering off" }[s.status]} plan (plan says ${s.planReady.pct}% by now)</p>
+        <p class="lede">${s.ready.pct}% through the plan · ${{ ahead: "ahead of", on: "right on", behind: "behind", base: "building base toward", new: "not started on", taper: "tapering off" }[s.status]} plan (plan says ${s.planReady.pct}% by now)</p>
 
         <div class="big-pred">
           <div><div class="l">Predicted marathon</div><div class="t">${s.pred ? hms(s.pred) : "—"}</div>
-            <div class="l">${s.pred ? pace(s.pred, MARATHON) + " · Riegel + Tanda average, last 8 weeks" : "Log a 3+ mile run to get a prediction"}</div></div>
+            <div class="l">${s.pred ? pace(s.pred, MARATHON) + " · last 8 weeks" : "Tick \"hard effort\" on a 3+ mile run to get a prediction"}</div></div>
           ${s.pred && s.predPrev ? `<span class="trend ${trend > 0 ? "up" : ""}">${trend > 0 ? "▼ " + hms(trend) + " faster" : trend < 0 ? "▲ " + hms(-trend) + " slower" : "no change"} vs 2 wks ago</span>` : ""}
         </div>
 
-        <h3>Readiness breakdown</h3>
+        ${(() => {
+          // What average training pace does the goal need at this week's volume?
+          // More volume buys you a slower average, which is the whole point of the build.
+          const need = goalTrainingPace(t.weekly), goal = goalSeconds();
+          if (!need || !goal) return "";
+          const yours = s.last28Secs > 0 && s.last28Miles > 0 ? s.last28Secs / s.last28Miles : 0;
+          const racePace = goal / MARATHON, peakNeed = goalTrainingPace(config.plan.peakWeeklyMiles);
+          // Below a certain volume the required pace goes faster than race pace, i.e. no
+          // sane training pace gets there. Say so, or this reads as "go run 7:45s".
+          if (need <= racePace) {
+            return `<p class="note">At this week's ${Math.round(t.weekly)} mi, no sensible training pace reaches <b>${hm(goal)}</b> — the maths asks for ${hms(need)}/mi, faster than race pace. <b>Volume is the lever here, not speed.</b> At the ${config.plan.peakWeeklyMiles} mi peak, ${hms(peakNeed)}/mi is enough.</p>`;
+          }
+          return `<p class="note">For <b>${hm(goal)}</b> off this week's ${Math.round(t.weekly)} mi, Tanda wants an average training pace near <b>${hms(need)}/mi</b>.` +
+            (yours ? ` You're averaging <b>${hms(yours)}/mi</b>.` : "") +
+            ` At the ${config.plan.peakWeeklyMiles} mi peak it eases to ${hms(peakNeed)}/mi.</p>`;
+        })()}
+
+        <h3>Plan progress breakdown</h3>
         <div class="split">
           <div class="stat"><div class="v">${mi(s.avgWeekly)}</div><div class="k">avg mi/week (4 wks) · peak goal ${config.plan.peakWeeklyMiles}, plan now ${Math.round(t.weekly)}</div>
             <div class="mini"><i style="width:${s.ready.w * 100}%"></i></div></div>
