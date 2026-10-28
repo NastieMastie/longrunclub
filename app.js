@@ -443,7 +443,11 @@
   function renderTrack(t) {
     const plan = readiness(t.weekly, t.long).pct;
     const track = $("#track");
-    track.innerHTML = stats.map((s, i) => `
+    // Lanes used to render in config order while the numerals read like ranks, so
+    // lane 1 was always Smass even with the lowest % printed beside him. Order the
+    // lanes by the number the track actually plots.
+    const lanes = stats.slice().sort((a, b) => b.ready.pct - a.ready.pct || a.runner.name.localeCompare(b.runner.name));
+    track.innerHTML = lanes.map((s, i) => `
       <div class="lane">
         <span class="lane-num">${i + 1}</span>
         <div class="lane-inner">
@@ -455,7 +459,7 @@
           </button>
         </div>
       </div>`).join("");
-    track.setAttribute("aria-label", "Marathon readiness: " + stats.map(s => `${s.runner.name} ${s.ready.pct}%`).join(", "));
+    track.setAttribute("aria-label", "Plan progress: " + lanes.map((s, i) => `${i + 1} ${s.runner.name} ${s.ready.pct}%`).join(", "));
     requestAnimationFrame(() => requestAnimationFrame(() => {
       track.querySelectorAll(".runner-dot").forEach(d => { d.style.left = d.dataset.left + "%"; });
     }));
