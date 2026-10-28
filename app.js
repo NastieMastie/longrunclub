@@ -231,7 +231,10 @@
     { id: "w40", emo: "🌋", name: "Volcano Week", desc: "40-mile week", test: s => s.week >= 40 },
     { id: "s3", emo: "🔥", name: "On Fire", desc: "3-week streak", test: s => s.streak >= 3 },
     { id: "s6", emo: "🤖", name: "Metronome", desc: "6-week streak", test: s => s.streak >= 6 },
-    { id: "dawn", emo: "🌅", name: "Dawn Patrol", desc: "Started before 6 am", test: s => s.run.t.getHours() < 6 },
+    // Runs carry the time they were LOGGED, not when they started, and a backdated run
+    // is stamped 12:00. So this is earnable by logging an early run early, which is what
+    // the description now says. Claiming "started before 6 am" was a number we don't have.
+    { id: "dawn", emo: "🌅", name: "Dawn Patrol", desc: "Logged a run before 6 am", test: s => s.run.t.getHours() < 6 },
     { id: "fast", emo: "⚡", name: "Zoomies", desc: "3+ mi under 8:00/mi", test: s => s.run.miles >= 3 && s.run.seconds / s.run.miles < 480 }
   ];
 
@@ -391,10 +394,17 @@
     const t = planTargets(now);
     $("#clubName").textContent = config.club;
     document.title = config.club;
-    const days = Math.max(0, Math.ceil((parseLocal(config.race.date) - now) / DAY));
+    // Whole calendar days. Subtracting raw timestamps and rounding up made a race that
+    // finished yesterday afternoon read as "today", because ceil(-0.9) is 0.
+    const days = Math.round((weekDayStart(parseLocal(config.race.date)) - weekDayStart(now)) / DAY);
     const phaseName = { base: "base building", build: "building", taper: "taper" }[t.phase];
-    $("#countdown").textContent = `${config.race.name} in ${days} days · ` +
-      `week ${t.weekOfPlan} of ${t.totalWeeks} · ${phaseName}`;
+    // Past the race the countdown used to sit on "in 0 days · week 26 of 26 · taper"
+    // for ever, judging everyone against a target that stopped meaning anything.
+    $("#countdown").textContent = days < 0
+      ? `${config.race.name} is run. ${-days} day${-days === 1 ? "" : "s"} ago.`
+      : days === 0
+        ? `${config.race.name} is today. Go get it.`
+        : `${config.race.name} in ${days} day${days === 1 ? "" : "s"} · week ${t.weekOfPlan} of ${t.totalWeeks} · ${phaseName}`;
     const me = stats.find(s => s.runner.id === meId);
     const who = $("#whoBtn");
     who.textContent = me ? me.runner.name[0] : "?";
@@ -869,7 +879,16 @@
       };
     });
   }
-  $("#logBtn").onclick = openLog;
+  // Bound before load() finishes, so a tap during a slow shared-log fetch used to
+  // throw on undefined `runs` and silently do nothing. Say what's happening instead.
+  $("#logBtn").onclick = () => {
+    if (!config || !runs) {
+      $("#logBtn").innerHTML = "Still loading…";
+      setTimeout(() => { $("#logBtn").innerHTML = '<span aria-hidden="true">+</span> Log a run'; }, 2000);
+      return;
+    }
+    openLog();
+  };
 
   // ---------- Pop-ups ----------
   let popQueue = [];

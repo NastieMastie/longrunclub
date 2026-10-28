@@ -31,6 +31,10 @@ body {
 /* Any author `display` beats the browser's own [hidden] rule, so hiding an element
    in JS silently fails and it keeps swallowing taps. Make [hidden] mean hidden. */
 [hidden] { display: none !important; }
+
+/* Rapid taps on a phone otherwise trigger double-tap zoom, and the second tap of a
+   quick Save-Save lands on zoomed-away content. */
+button, input, select, label, .tab { touch-action: manipulation; }
 button { font: inherit; color: inherit; cursor: pointer; }
 :focus-visible { outline: 3px solid var(--lime); outline-offset: 2px; }
 
